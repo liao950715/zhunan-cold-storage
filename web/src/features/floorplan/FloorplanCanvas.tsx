@@ -14,6 +14,8 @@ export interface CanvasProps {
   highlightCodes: Set<string>;
   highlightLabel?: string;
   compact?: boolean;
+  /** 固定標示（例如搬移的「① 從這裡搬出」「② 搬到這裡」）：整格上色＋大字標籤，優先於點選與搜尋 */
+  marks?: Record<string, { label: string; kind: "from" | "to" }>;
   onSelectLocation: (code: string | null) => void;
   onSelectRack: (key: string | null) => void;
   onRacksChange: (racks: DraftRack[]) => void;
@@ -31,6 +33,8 @@ export const CELL_COLORS = {
   full: { fill: "#a4262c", stroke: "#7a1c21", text: "#ffffff", label: "已滿" },
   occupied: { fill: "#1f6b3a", stroke: "#14502a", text: "#ffffff", label: "有貨" },
   empty: { fill: "#ffffff", stroke: "#9aa3ad", text: "#20252b", label: "空位" },
+  from: { fill: "#5a8199", stroke: "#29485c", text: "#ffffff", label: "① 從這裡搬出" },
+  to: { fill: "#6b5b95", stroke: "#463a66", text: "#ffffff", label: "② 搬到這裡" },
 };
 const C = { floor: "#f5f6f8", wall: "#9aa3ad", aisle: "#eceef1", entrance: "#e8effc", rack: "#e6e9ee", rackEdit: "#e8effc", rackStroke: "#9aa3ad", ink: "#20252b", ink2: "#525c69" };
 
@@ -97,11 +101,12 @@ export default function FloorplanCanvas(p: CanvasProps) {
                 <Rect y={-HANDLE_H} width={rack.width} height={HANDLE_H} fill={p.editing ? (rackSelected ? CELL_COLORS.selected.stroke : "#5a8199") : "transparent"} cornerRadius={[6, 6, 0, 0]} />
                 <Text text={p.editing ? `⠿ ${rack.label ?? `貨架 ${rack.code}`}（拖曳這一列移動貨架）` : (rack.label ?? `貨架 ${rack.code}`)} x={6} y={-HANDLE_H + 4} fontSize={20} fill={p.editing ? "#ffffff" : C.ink} />
                 {rack.locations.map((loc) => {
-                  const selected = p.selectedLocation === loc.code;
-                  const hl = !selected && p.highlightCodes.has(loc.code);
+                  const mark = p.marks?.[loc.code];
+                  const selected = !mark && p.selectedLocation === loc.code;
+                  const hl = !mark && !selected && p.highlightCodes.has(loc.code);
                   const base = CELL_COLORS[cellState(loc)];
-                  const skin = selected ? CELL_COLORS.selected : hl ? CELL_COLORS.search : base;
-                  const badge = selected ? CELL_COLORS.selected.label : hl ? (p.highlightLabel ?? CELL_COLORS.search.label) : null;
+                  const skin = mark ? CELL_COLORS[mark.kind] : selected ? CELL_COLORS.selected : hl ? CELL_COLORS.search : base;
+                  const badge = mark ? null : selected ? CELL_COLORS.selected.label : hl ? (p.highlightLabel ?? CELL_COLORS.search.label) : null;
                   const pick = (e: Konva.KonvaEventObject<Event>) => { e.cancelBubble = true; p.onSelectLocation(loc.code); p.onSelectRack(p.editing ? rack.key : null); };
                   // 有右下角標記時兩段文字共用一列：縮到 16px 避免重疊（白字對比仍 ≥ 4.5:1）
                   const statusSize = badge ? fs(16) : fs(19);
@@ -110,15 +115,20 @@ export default function FloorplanCanvas(p: CanvasProps) {
                       onDragStart={(e) => { e.cancelBubble = true; }}
                       onDragEnd={(e) => { e.cancelBubble = true; moveLocation(rack.key, loc.code, e.target.x(), e.target.y()); }}
                       onClick={pick} onTap={pick}>
-                      <Rect width={loc.width} height={loc.height} fill={skin.fill} stroke={skin.stroke} strokeWidth={selected || hl ? 5 : 2} cornerRadius={4} />
-                      {/* 1 儲位編號 */}
+                      <Rect width={loc.width} height={loc.height} fill={skin.fill} stroke={skin.stroke} strokeWidth={mark || selected || hl ? 5 : 2} cornerRadius={4} />
+                      {/* 1 儲位編號（有固定標示時，庫存狀態移到右上角） */}
                       <Text text={loc.code} x={8} y={6} fontSize={fs(22)} fontStyle="bold" fill={skin.text} />
+                      {mark && <Text text={base.label} x={8} y={9} width={loc.width - 16} align="right" fontSize={fs(16)} fontStyle="bold" fill={skin.text} />}
                       {/* 2 商品與數量 */}
                       {loc.occupied && loc.product && (
                         <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={8} y={loc.height / 2 - fs(12)} fontSize={fs(22)} fontStyle="bold" fill={skin.text} width={loc.width - 16} ellipsis wrap="none" />
                       )}
                       {/* 3 庫存狀態（永遠顯示）＋ 右下角「已選／搜尋結果」 */}
-                      <Text text={base.label} x={8} y={loc.height - statusSize - 8} fontSize={statusSize} fontStyle="bold" fill={skin.text} />
+                      {mark ? (
+                        <Text text={mark.label} x={8} y={loc.height - fs(20) - 8} width={loc.width - 16} fontSize={fs(20)} fontStyle="bold" fill={skin.text} />
+                      ) : (
+                        <Text text={base.label} x={8} y={loc.height - statusSize - 8} fontSize={statusSize} fontStyle="bold" fill={skin.text} />
+                      )}
                       {badge && (
                         <Text text={badge} x={8} y={loc.height - statusSize - 8} width={loc.width - 16} align="right" fontSize={statusSize} fontStyle="bold" fill={skin.text} />
                       )}
