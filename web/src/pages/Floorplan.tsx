@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { del, errorMessage, get, put } from "../api/client";
 import type { DraftRack, WarehouseLayout, WarehouseSummary } from "../api/types";
 import FloorplanCanvas from "../features/floorplan/FloorplanCanvas";
 import LocationPanel from "../features/floorplan/LocationPanel";
+import { useDialog } from "../components/ConfirmDialog";
 import { defaultLocations, findRackOverlaps, nextLocationCode, nextRackCode, toDraft, toPayload } from "../features/floorplan/geometry";
 
 /**
@@ -14,6 +15,8 @@ import { defaultLocations, findRackOverlaps, nextLocationCode, nextRackCode, toD
  */
 export default function Floorplan() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const dialog = useDialog();
   const [params, setParams] = useSearchParams();
   const warehouses = useQuery({ queryKey: ["warehouses"], queryFn: () => get<{ items: WarehouseSummary[] }>("/warehouses") });
   const whCode = params.get("warehouse") ?? warehouses.data?.items[0]?.code ?? null;
@@ -88,14 +91,14 @@ export default function Floorplan() {
     setDraft(draft.map((r) => (r.key !== selectedRack.key ? r : { ...r, locations: [...r.locations, { code, x: 0, y: 0, width: w, height: h, defaultCapacity: 20 }] })));
     setSelectedLocation(code);
   }
-  function removeSelected() {
+  async function removeSelected() {
     if (selectedLocation && selectedRack) {
       const loc = selectedRack.locations.find((l) => l.code === selectedLocation);
       if (!loc) return;
       if (loc.id === undefined) {
         setDraft(draft.map((r) => (r.key !== selectedRack.key ? r : { ...r, locations: r.locations.filter((l) => l.code !== selectedLocation) })));
         setSelectedLocation(null);
-      } else if (confirm(`確定刪除儲位 ${loc.code}？（有庫存會被拒絕）`)) {
+      } else if (await dialog.confirm("刪除儲位", `確定刪除儲位 ${loc.code}？（有庫存會被拒絕）`)) {
         remove.mutate({ kind: "location", id: loc.id });
       }
       return;
@@ -104,7 +107,7 @@ export default function Floorplan() {
       if (selectedRack.id === undefined) {
         setDraft(draft.filter((r) => r.key !== selectedRack.key));
         setSelectedRackKey(null);
-      } else if (confirm(`確定刪除貨架 ${selectedRack.code} 及其所有儲位？（任一儲位有庫存會被拒絕）`)) {
+      } else if (await dialog.confirm("刪除貨架", `確定刪除貨架 ${selectedRack.code} 及其所有儲位？（任一儲位有庫存會被拒絕）`)) {
         remove.mutate({ kind: "rack", id: selectedRack.id });
       }
     }
@@ -182,7 +185,17 @@ export default function Floorplan() {
           <p className="text-slate-500">載入平面圖…</p>
         )}
         <aside className="rounded border border-slate-200 bg-white p-4 min-h-40">
-          {!editing && selectedLoc && <LocationPanel locationId={selectedLoc.id} />}
+          {!editing && selectedLoc && (
+            <LocationPanel
+              locationId={selectedLoc.id}
+              onAction={(action, d) => {
+                const first = d.lines[0];
+                if (action === "inbound") navigate(`/inbound?locationId=${d.location.id}`);
+                if (action === "outbound") navigate(`/outbound?productId=${d.currentProduct!.id}&locationId=${d.location.id}${first ? `&batchId=${first.batch.id}` : ""}`);
+                if (action === "transfer") navigate(`/transfer?locationId=${d.location.id}${first ? `&batchId=${first.batch.id}` : ""}`);
+              }}
+            />
+          )}
           {!editing && !selectedLoc && <p className="text-sm text-slate-500">點選儲位查看內容。綠色＝有庫存，白色＝空儲位{highlightCodes.size > 0 && "，橘色＝搜尋結果"}。</p>}
           {editing && selectedRack && !selectedLocation && (
             <div className="space-y-2 text-sm">

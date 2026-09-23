@@ -2,8 +2,17 @@ import { NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const NAV: Array<{ to: string; label: string; adminOnly?: boolean }> = [
-  { to: "/floorplan", label: "冷凍庫平面圖" },
-  // Stage 4 加入：Dashboard、商品、庫存查詢、入庫、出庫、報損、盤點、異動紀錄、系統設定
+  { to: "/", label: "Dashboard" },
+  { to: "/floorplan", label: "平面圖" },
+  { to: "/inventory", label: "庫存查詢" },
+  { to: "/inbound", label: "入庫" },
+  { to: "/outbound", label: "出庫" },
+  { to: "/transfer", label: "搬移" },
+  { to: "/damage", label: "報損" },
+  { to: "/stocktake", label: "盤點" },
+  { to: "/movements", label: "異動紀錄" },
+  { to: "/products", label: "商品" },
+  { to: "/settings", label: "設定", adminOnly: true },
 ];
 
 export default function Shell() {

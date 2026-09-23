@@ -12,6 +12,8 @@ import { searchRouter } from "./routes/search.js";
 import { stockRouter } from "./routes/stock.js";
 import { movementsRouter } from "./routes/movements.js";
 import { locationDeleteRouter, racksRouter, warehouseLayoutRouter } from "./routes/layout.js";
+import { stocktakesRouter } from "./routes/stocktakes.js";
+import { dashboardRouter } from "./routes/dashboard.js";
 
 /** 建立 Express app（不 listen），供 index.ts 與 Supertest 共用。 */
 export function createApp() {
@@ -38,6 +40,8 @@ export function createApp() {
   app.use("/api/search", searchRouter);
   app.use("/api/stock", stockRouter);
   app.use("/api/movements", movementsRouter);
+  app.use("/api/stocktakes", stocktakesRouter);
+  app.use("/api/dashboard", dashboardRouter);
 
   app.use(errorHandler);
   return app;

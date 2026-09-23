@@ -117,3 +117,115 @@ export interface DraftRack {
   height: number;
   locations: DraftLocation[];
 }
+
+export interface BatchItem {
+  id: number;
+  batchNo: string;
+  productId: number;
+  receivedDate: string;
+  expiryDate: string;
+  initialQty: number;
+  note: string | null;
+  available: number;
+  product: { id: number; name: string; unit: string };
+}
+
+export interface ProductStock {
+  product: Product;
+  total: number;
+  batches: Array<{ batch: StockLine["batch"]; quantity: number; locations: number }>;
+  lines: StockLine[];
+}
+
+export interface SearchResult {
+  query: string;
+  products: Array<{ id: number; name: string; unit: string; category: string | null }>;
+  lines: StockLine[];
+}
+
+export interface FefoSuggestion {
+  product: { id: number; name: string; unit: string };
+  requested: number;
+  available: number;
+  shortage: number;
+  suggestions: Array<{ batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; take: number }>;
+}
+
+export type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT";
+
+export interface Movement {
+  id: number;
+  type: MovementType;
+  productId: number;
+  batchId: number;
+  fromLocationId: number | null;
+  toLocationId: number | null;
+  quantity: number;
+  fromBeforeQty: number | null;
+  fromAfterQty: number | null;
+  toBeforeQty: number | null;
+  toAfterQty: number | null;
+  productNameSnapshot: string;
+  locationCodeSnapshot: string;
+  reason: string | null;
+  referenceType: string | null;
+  referenceId: number | null;
+  createdAt: string;
+  batch: { batchNo: string };
+  product: { name: string; unit: string };
+  fromLocation: { code: string } | null;
+  toLocation: { code: string } | null;
+  operator: { id: number; displayName: string };
+}
+
+export interface StocktakeItem {
+  id: number;
+  locationId: number;
+  locationCode: string;
+  batchId: number;
+  batchNo: string;
+  expiryDate: string;
+  product: { id: number; name: string; unit: string };
+  systemQty: number;
+  countedQty: number;
+  diff: number;
+}
+
+export interface Stocktake {
+  id: number;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  warehouseId: number | null;
+  warehouse: { id: number; code: string; name: string } | null;
+  note: string | null;
+  submittedAt: string;
+  submittedBy: { id: number; displayName: string };
+  reviewedAt: string | null;
+  reviewedBy: { id: number; displayName: string } | null;
+  reviewNote: string | null;
+  items: StocktakeItem[];
+}
+
+export interface BaselineItem {
+  locationId: number;
+  locationCode: string;
+  batchId: number;
+  batchNo: string;
+  expiryDate: string;
+  product: { id: number; name: string; unit: string };
+  systemQty: number;
+}
+
+export interface Dashboard {
+  stats: { activeProducts: number; productsInStock: number; batchesInStock: number; occupiedLocations: number; totalLocations: number; pendingStocktakes: number };
+  totalsByUnit: Array<{ unit: string; quantity: number }>;
+  expiryAlerts: Array<{ batchId: number; batchNo: string; product: { id: number; name: string; unit: string }; expiryDate: string; daysLeft: number; expired: boolean; quantity: number; locations: string[] }>;
+  lowStock: Array<{ productId: number; name: string; unit: string; available: number; threshold: number }>;
+}
+
+export interface UserItem {
+  id: number;
+  username: string;
+  displayName: string;
+  role: Role;
+  status: "ACTIVE" | "DISABLED";
+}

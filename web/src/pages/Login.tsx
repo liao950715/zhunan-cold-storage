@@ -12,7 +12,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/floorplan" replace />;
+  if (user) return <Navigate to="/" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -20,7 +20,7 @@ export default function Login() {
     setError(null);
     try {
       await login(username, password);
-      const to = (loc.state as { from?: string } | null)?.from ?? "/floorplan";
+      const to = (loc.state as { from?: string } | null)?.from ?? "/";
       nav(to, { replace: true });
     } catch (err) {
       setError(errorMessage(err));

@@ -332,6 +332,61 @@ export function damage(input: DamageInput, ctx: Ctx) {
   });
 }
 
+// ---------- 盤點核准／退回（FR-015，僅 ADMIN；路由層 requireRole） ----------
+
+/**
+ * 核准：逐筆比對 systemQty 與目前庫存，任一不符 → 409 STOCKTAKE_CONFLICT 全單拒絕（Q9／AT-24）；
+ * 全部相符才把庫存調整為 countedQty 並寫 ADJUSTMENT 紀錄。
+ */
+export function approveStocktake(stocktakeId: number, reviewNote: string | null, ctx: Ctx) {
+  return runStockTx(ctx, async (tx) => {
+    const st = await tx.stocktake.findUnique({ where: { id: stocktakeId }, include: { items: { include: { batch: { include: { product: true } }, location: true } } } });
+    if (!st) throw notFound("盤點單");
+    if (st.status !== "PENDING") throw new AppError("STOCKTAKE_NOT_PENDING", 409, `盤點單 #${st.id} 已${st.status === "APPROVED" ? "核准" : "退回"}，不可再操作`);
+
+    const conflicts = [];
+    for (const item of st.items) {
+      const inv = await tx.inventory.findUnique({ where: { batchId_locationId: { batchId: item.batchId, locationId: item.locationId } } });
+      const current = inv?.quantity ?? 0;
+      if (current !== item.systemQty) conflicts.push({ locationCode: item.location.code, batchNo: item.batch.batchNo, systemQty: item.systemQty, current });
+    }
+    if (conflicts.length > 0) {
+      throw new AppError(
+        "STOCKTAKE_CONFLICT",
+        409,
+        `盤點提交後庫存已變動（${conflicts.map((c) => `${c.locationCode} ${c.batchNo}：基準 ${c.systemQty}、目前 ${c.current}`).join("；")}），請退回並重新盤點`,
+        { conflicts },
+      );
+    }
+
+    const movementIds: number[] = [];
+    for (const item of st.items) {
+      if (item.diff === 0) continue;
+      const product = item.batch.product;
+      const loc = item.location;
+      const label = `批次 ${item.batch.batchNo} 於儲位 ${loc.code}`;
+      const r = item.diff > 0 ? await addInventory(tx, item.batchId, item.locationId, item.diff) : await removeInventory(tx, item.batchId, item.locationId, -item.diff, label);
+      const m = await createMovement(tx, ctx.operator.id, {
+        type: "ADJUSTMENT", productId: product.id, productName: product.name, batchId: item.batchId, quantity: Math.abs(item.diff),
+        ...(item.diff > 0 ? { to: { locationId: loc.id, code: loc.code, ...r } } : { from: { locationId: loc.id, code: loc.code, ...r } }),
+        reason: `盤點 #${st.id} 核准調整（實盤 ${item.countedQty}）${reviewNote ? "：" + reviewNote : ""}`,
+        referenceType: "STOCKTAKE", referenceId: st.id,
+      });
+      movementIds.push(m.id);
+    }
+    await tx.stocktake.update({ where: { id: st.id }, data: { status: "APPROVED", reviewedById: ctx.operator.id, reviewedAt: new Date(), reviewNote } });
+    return { stocktakeId: st.id, status: "APPROVED" as const, adjustments: movementIds.length, movementIds };
+  });
+}
+
+export async function rejectStocktake(stocktakeId: number, reviewNote: string | null, ctx: Ctx) {
+  const st = await prisma.stocktake.findUnique({ where: { id: stocktakeId } });
+  if (!st) throw notFound("盤點單");
+  if (st.status !== "PENDING") throw new AppError("STOCKTAKE_NOT_PENDING", 409, `盤點單 #${st.id} 已處理，不可再操作`);
+  await prisma.stocktake.update({ where: { id: st.id }, data: { status: "REJECTED", reviewedById: ctx.operator.id, reviewedAt: new Date(), reviewNote } });
+  return { stocktakeId: st.id, status: "REJECTED" as const };
+}
+
 // ---------- 容量設定（FR-007） ----------
 
 export interface CapacityInput {
