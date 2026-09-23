@@ -2,6 +2,11 @@
 
 大學「系統分析與設計」課程專案。Web／PWA 庫存管理系統：商品／批次／儲位三層追蹤、可編輯 2D 冷凍庫平面圖、入出庫／搬移／報損／盤點與完整異動紀錄。介面針對現場與中老年使用者設計（大字、單欄步驟、顏色＋文字並用）。
 
+| | |
+|---|---|
+| 線上系統 | **https://zhunan-cold-storage.liao950715.workers.dev**（第一次開啟需輸入同步碼，向管理員取得；示範帳號 `admin/admin1234`、`staff/staff1234`） |
+| GitHub | **https://github.com/liao950715/zhunan-cold-storage** |
+
 - 需求：[docs/PRD.md](docs/PRD.md)、[docs/REQUIREMENTS_DECISIONS.md](docs/REQUIREMENTS_DECISIONS.md)
 - 設計：[docs/TECHNICAL_DESIGN.md](docs/TECHNICAL_DESIGN.md)、[docs/DATABASE_DESIGN.md](docs/DATABASE_DESIGN.md)、[docs/UI_DESIGN.md](docs/UI_DESIGN.md)
 - 測試與計畫：[docs/TEST_PLAN.md](docs/TEST_PLAN.md)、[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
