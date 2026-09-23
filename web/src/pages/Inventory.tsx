@@ -1,16 +1,14 @@
-import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { get } from "../api/client";
 import type { SearchResult, StockLine } from "../api/types";
 import { Card, Collapsible, PageTitle, fmtDate } from "../components/ui";
-import { SearchIcon } from "../components/icons";
+import SearchBox from "../components/SearchBox";
 
 /** 查庫存（FR-019）：先看「商品、總量、位置、最近到期日」，展開才看各批次；不同單位分開。 */
 export default function Inventory() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
-  const [input, setInput] = useState(q);
   const result = useQuery({ queryKey: ["search", q], queryFn: () => get<SearchResult>(`/search?q=${encodeURIComponent(q)}`), enabled: q.length > 0 });
 
   const lines = result.data?.lines ?? [];
@@ -22,18 +20,10 @@ export default function Inventory() {
     groups.set(l.product.id, g);
   }
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    setParams(input.trim() ? { q: input.trim() } : {});
-  }
-
   return (
     <div className="space-y-5">
       <PageTitle sub="輸入商品名稱、儲位或批次編號">查庫存</PageTitle>
-      <form className="flex gap-3" onSubmit={submit}>
-        <input className="input mt-0 flex-1" placeholder="例如：甘藍菜、A-01-02" value={input} onChange={(e) => setInput(e.target.value)} autoFocus aria-label="搜尋" />
-        <button className="btn-primary" type="submit"><SearchIcon size={22} />找貨</button>
-      </form>
+      <SearchBox initial={q} autoFocus onSearch={(t) => setParams({ q: t })} />
       {!q && (
         <div className="flex flex-wrap items-center gap-3">
           <Link className="btn" to="/floorplan">看冷凍庫平面圖</Link>

@@ -1,21 +1,15 @@
-import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { get } from "../api/client";
 import type { Dashboard as DashboardData } from "../api/types";
 import { Card, Collapsible, PageTitle, fmtDate } from "../components/ui";
 import { InboundIcon, OutboundIcon, SearchIcon } from "../components/icons";
+import SearchBox from "../components/SearchBox";
 
 /** 首頁：1 找貨 → 2 入庫／出庫 → 3 需要處理 → 4 庫存概況。 */
 export default function Dashboard() {
   const nav = useNavigate();
-  const [q, setQ] = useState("");
   const d = useQuery({ queryKey: ["dashboard"], queryFn: () => get<DashboardData>("/dashboard") }).data;
-
-  function search(e: FormEvent) {
-    e.preventDefault();
-    if (q.trim()) nav(`/inventory?q=${encodeURIComponent(q.trim())}`);
-  }
 
   const expired = d?.expiryAlerts.filter((a) => a.expired) ?? [];
   const expiring = d?.expiryAlerts.filter((a) => !a.expired) ?? [];
@@ -25,10 +19,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <PageTitle sub="先找貨，或直接入庫、出庫">首頁</PageTitle>
 
-      <form onSubmit={search} className="flex gap-3">
-        <input className="input mt-0 flex-1" placeholder="輸入商品名稱或儲位，例如：甘藍菜、A-01-02" value={q} onChange={(e) => setQ(e.target.value)} aria-label="搜尋商品或儲位" />
-        <button className="btn-primary" type="submit"><SearchIcon size={22} />找貨</button>
-      </form>
+      <SearchBox onSearch={(t) => nav(`/inventory?q=${encodeURIComponent(t)}`)} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <BigLink to="/inventory" icon={<SearchIcon size={30} />} title="查庫存" hint="找商品、看數量與位置" />

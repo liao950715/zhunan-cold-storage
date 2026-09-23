@@ -20,10 +20,10 @@ export default function LocationPanel({ locationId, onAction }: { locationId: nu
         <p className="muted">{locationWords(d.location.code)}</p>
       </div>
       {d.currentProduct ? (
-        <div className={`rounded-[10px] p-4 ${full ? "bg-[#a4262c] text-white" : "bg-[#d9eaf7]"}`}>
+        <div className={`rounded-[10px] p-4 ${full ? "bg-[#a4262c] text-white" : "bg-[#1f6b3a] text-white"}`}>
           <p className="text-[18px] font-bold">{full ? "已滿" : "有貨"}</p>
           <p className="text-[24px] font-bold">{d.currentProduct.name}</p>
-          <p className="text-[20px]">{d.occupied} {d.currentProduct.unit}{cap !== null ? <span className={full ? "text-white/90" : "text-ink-2"}> / 容量 {cap}</span> : <span className="text-ink-2">（未設定容量）</span>}</p>
+          <p className="text-[20px]">{d.occupied} {d.currentProduct.unit}{cap !== null ? <span className="text-white/90"> / 容量 {cap}</span> : <span className="text-white/90">（未設定容量）</span>}</p>
         </div>
       ) : (
         <div className="rounded-[10px] bg-bg-2 p-4 text-[20px]">空位{d.location.defaultCapacity !== null && <span className="muted">（可放 {d.location.defaultCapacity}）</span>}</div>

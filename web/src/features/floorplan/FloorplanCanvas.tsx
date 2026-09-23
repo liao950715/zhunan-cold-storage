@@ -29,7 +29,7 @@ export const CELL_COLORS = {
   selected: { fill: "#5a8199", stroke: "#29485c", text: "#ffffff", label: "✓ 已選這裡" },
   search: { fill: "#ffe066", stroke: "#111111", text: "#111111", label: "搜尋結果" },
   full: { fill: "#a4262c", stroke: "#7a1c21", text: "#ffffff", label: "已滿" },
-  occupied: { fill: "#d9eaf7", stroke: "#4a7fb5", text: "#20252b", label: "有貨" },
+  occupied: { fill: "#1f6b3a", stroke: "#14502a", text: "#ffffff", label: "有貨" },
   empty: { fill: "#ffffff", stroke: "#9aa3ad", text: "#20252b", label: "空位" },
 };
 const C = { floor: "#f5f6f8", wall: "#9aa3ad", aisle: "#eceef1", entrance: "#e8effc", rack: "#e6e9ee", rackEdit: "#e8effc", rackStroke: "#9aa3ad", ink: "#20252b", ink2: "#525c69" };
@@ -94,7 +94,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
             return (
               <Group key={rack.key} x={rack.x} y={rack.y} draggable={p.editing} onDragEnd={(e) => moveRack(rack.key, e.target.x(), e.target.y())} onClick={select} onTap={select}>
                 <Rect width={rack.width} height={rack.height} fill={p.editing ? C.rackEdit : C.rack} stroke={rackSelected ? CELL_COLORS.selected.stroke : C.rackStroke} strokeWidth={rackSelected ? 4 : 2} cornerRadius={6} />
-                <Rect y={-HANDLE_H} width={rack.width} height={HANDLE_H} fill={p.editing ? (rackSelected ? CELL_COLORS.selected.fill : "#175cd3") : "transparent"} cornerRadius={[6, 6, 0, 0]} />
+                <Rect y={-HANDLE_H} width={rack.width} height={HANDLE_H} fill={p.editing ? (rackSelected ? CELL_COLORS.selected.stroke : "#5a8199") : "transparent"} cornerRadius={[6, 6, 0, 0]} />
                 <Text text={p.editing ? `⠿ ${rack.label ?? `貨架 ${rack.code}`}（拖曳這一列移動貨架）` : (rack.label ?? `貨架 ${rack.code}`)} x={6} y={-HANDLE_H + 4} fontSize={20} fill={p.editing ? "#ffffff" : C.ink} />
                 {rack.locations.map((loc) => {
                   const selected = p.selectedLocation === loc.code;
