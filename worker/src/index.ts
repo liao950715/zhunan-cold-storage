@@ -30,7 +30,21 @@ export class WarehouseDO extends DurableObject<Env> {
         await seedBase(db);
         seedDemoStock(db);
       }
-      this.app = createApp({ db, jwtSecret: env.JWT_SECRET || "dev-only-secret-change-me", syncSecret: (env.SYNC_SECRET || "").trim() });
+      this.app = createApp({
+        db,
+        jwtSecret: env.JWT_SECRET || "dev-only-secret-change-me",
+        syncSecret: (env.SYNC_SECRET || "").trim(),
+        resetDemo: async () => {
+          // 交易內清空所有業務資料（保留 meta），再重新 seed；使用者也重建（示範帳號）
+          db.tx(() => {
+            for (const t of ["IdempotencyKey", "StocktakeItem", "Stocktake", "StockMovement", "Inventory", "LocationCapacity", "Batch", "BatchCounter", "Location", "Rack", "Warehouse", "Product", "PairAttempt", "User"]) db.run(`DELETE FROM ${t}`);
+            db.run("DELETE FROM sqlite_sequence");
+          });
+          await seedBase(db);
+          seedDemoStock(db);
+          return { ok: true as const };
+        },
+      });
     });
   }
 

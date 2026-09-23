@@ -13,7 +13,7 @@ import * as q from "./services/queryService.js";
 import * as stock from "./services/stockService.js";
 import { deleteLocation, deleteRack, saveLayout } from "./services/layoutService.js";
 
-export interface AppEnv { db: Db; jwtSecret: string; syncSecret: string }
+export interface AppEnv { db: Db; jwtSecret: string; syncSecret: string; resetDemo: () => Promise<{ ok: true }> }
 type Role = "ADMIN" | "STAFF";
 interface AuthUser { id: number; username: string; displayName: string; role: Role }
 type Vars = { user: AuthUser };
@@ -242,6 +242,14 @@ export function createApp(env: AppEnv) {
 
   // ---------- Dashboard ----------
   app.get("/api/dashboard", (c) => c.json(q.getDashboard(db)));
+
+  // ---------- 展示用：重置成初始示範資料（僅 ADMIN；清空全部庫存與紀錄後重新 seed） ----------
+  app.post("/api/admin/reset-demo", requireAdmin, async (c) => {
+    const { confirm } = z.object({ confirm: z.literal("RESET") }).parse(await c.req.json());
+    void confirm;
+    const result = await env.resetDemo();
+    return c.json(result);
+  });
 
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "找不到此 API" } }, 404));
   return app;

@@ -20,3 +20,7 @@ Thumbs.db
 worker/.dev.vars
 .wrangler/
 web/dev-dist/
+
+# Playwright
+playwright-report/
+test-results/

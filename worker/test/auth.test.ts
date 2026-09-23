@@ -66,4 +66,21 @@ describe("裝置配對（同步碼）與 FR-001 登入角色", () => {
     // 已登入但被停用的 session 也失效
     expect((await c.get("/api/auth/me")).status).toBe(401);
   });
+
+  it("展示重置：只有 ADMIN 可用，重置後回到初始示範資料", async () => {
+    const staff = await loginAs("staff");
+    expect((await staff.post("/api/admin/reset-demo", { confirm: "RESET" })).status).toBe(403);
+    const admin = await loginAs("admin");
+    const p = (await admin.get("/api/products?q=%E7%94%98%E8%97%8D%E8%8F%9C")).body.items[0];
+    const loc = (await admin.get("/api/warehouses")).body.items[0];
+    const layout = await admin.get(`/api/warehouses/${loc.id}/layout`);
+    const empty = layout.body.racks[0].locations.find((l: any) => !l.occupied);
+    await admin.post("/api/stock/inbound", { productId: p.id, quantity: 5, expiryDate: "2026-12-31", allocations: [{ locationId: empty.id, quantity: 5 }] }).expect(201);
+    expect((await admin.get("/api/dashboard")).body.stats.batchesInStock).toBe(5);
+    expect((await admin.post("/api/admin/reset-demo", { confirm: "RESET" })).status).toBe(200);
+    // 重置後使用者也重建；舊 session 的 user id 仍為 1，可繼續查詢
+    const admin2 = await loginAs("admin");
+    expect((await admin2.get("/api/dashboard")).body.stats.batchesInStock).toBe(4);
+    expect((await admin2.get("/api/movements")).body.total).toBe(5);
+  });
 });

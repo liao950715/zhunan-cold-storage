@@ -13,7 +13,10 @@
     "typecheck": "npm run typecheck -w worker && npm run typecheck -w web",
     "test": "npm run test -w worker && npm run test -w web",
     "test:worker": "npm run test -w worker",
-    "deploy": "npm run build -w web && npm run deploy -w worker"
+    "deploy": "npm run build -w web && npm run deploy -w worker",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report",
+    "demo:reset": "node scripts/demo-reset.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

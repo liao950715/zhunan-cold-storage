@@ -30,6 +30,15 @@ export default function Settings() {
     onError: (e) => setMsg({ kind: "error", text: errorMessage(e) }),
   });
 
+  const reset = useMutation({
+    mutationFn: () => post("/admin/reset-demo", { confirm: "RESET" }),
+    onSuccess: async () => {
+      await qc.invalidateQueries();
+      setMsg({ kind: "ok", text: "已重置為展示資料：帳號、兩座冷凍庫、20 種商品、4 批示範庫存。" });
+    },
+    onError: (e) => setMsg({ kind: "error", text: errorMessage(e) }),
+  });
+
   if (user?.role !== "ADMIN") return <Message kind="warn">此頁僅管理員可用。</Message>;
 
   function submit(e: FormEvent) {
@@ -65,6 +74,11 @@ export default function Settings() {
             </tbody>
           </table></div>
         </Card>
+        <div className="space-y-3">
+        <Card title="展示用">
+          <p className="muted">把所有庫存、紀錄、盤點與布局清掉，回到初始示範資料。展示前使用；正式營運後請不要按。</p>
+          <button type="button" className="btn mt-3 text-bad" disabled={reset.isPending} onClick={async () => { if (await dialog.confirm("重置為展示資料", "會刪除目前所有庫存、異動紀錄、盤點單與布局變更，並重建示範帳號。確定要重置嗎？")) reset.mutate(); }}>{reset.isPending ? "重置中…" : "重置為展示資料"}</button>
+        </Card>
         <Card title="新增帳號">
           <form onSubmit={submit} className="space-y-2">
             <Field label="帳號 *"><input className="input" required minLength={3} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>
@@ -74,6 +88,7 @@ export default function Settings() {
             <button className="btn-primary" type="submit" disabled={create.isPending}>建立</button>
           </form>
         </Card>
+        </div>
       </div>
     </div>
   );

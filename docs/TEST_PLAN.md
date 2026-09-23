@@ -110,3 +110,17 @@ npm run test:e2e            # Playwright（需先 npm run dev 或由 config webS
 
 - 每個 Stage 的對應測試全部通過並記錄於交付報告。
 - Stage 5 結束時：AT-01～AT-25 各至少有一個自動化或人工驗證項目標記「已執行、通過」，未通過者如實列出。
+
+
+---
+
+## 7. 執行狀態（2026-09-23，Stage 5）
+
+| 層級 | 指令 | 結果 |
+|---|---|---|
+| API／整合（Workers pool，每測試獨立 DO 儲存） | `npm run test:worker` | **45 項通過**：AT-01～07、09、11～17、19～25；I-1（DB CHECK）、I-3（Idempotency）、I-4（並發 20 筆恰好 10 成功）、I-5、I-6、I-7、I-8；配對節流；展示重置權限 |
+| 前端單元 | `npm run test -w web` | 5 項通過（平面圖幾何） |
+| E2E（Playwright，桌機 1440＋手機 Pixel 5） | `npm run test:e2e` | **10 項通過**：整合情境 30→5→10→3＝17（含 AT-04 即時提示、AT-08 重新整理）、AT-09／10 搜尋定位、AT-15／16／17／18 平面圖、AT-21～24 盤點權限、NFR-02 手機無橫向溢出 |
+| 人工驗證 | `docs/MANUAL_VERIFICATION.md` | 待組員填寫（含手機／平板實機） |
+
+未自動化、以人工驗證為主：NFR-01 繁中、NFR-02 實機觸控、AT-14 圖上點擊混放提示（有單元層 API 測試）。
