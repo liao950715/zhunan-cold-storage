@@ -139,8 +139,8 @@ export default function Outbound() {
           <div className="space-y-3">
             {!preset.locationId && <p className="muted">系統建議優先出即將到期的貨；不合適可以按「調整」。</p>}
             <div className="divide-y divide-line">
-              {lines.map((l, i) => (
-                <div key={`${l.batchId}-${l.locationId}`} className={`flex flex-wrap items-center gap-3 py-3 ${l.quantity > 0 ? "" : "opacity-60"}`}>
+              {lines.map((l, i) => (adjusting || l.quantity > 0) && (
+                <div key={`${l.batchId}-${l.locationId}`} className={`flex flex-wrap items-center gap-3 py-3 ${l.quantity > 0 ? "" : "opacity-70"}`}>
                   <div className="flex-1">
                     <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}</p>
                     <p className="muted">
