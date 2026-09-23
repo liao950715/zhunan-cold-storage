@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
-import { useInvalidateStock, useProducts } from "../api/hooks";
+import { useAllLocations, useInvalidateStock, useLayout, useProducts, useWarehouses } from "../api/hooks";
+import FloorplanCanvas from "../features/floorplan/FloorplanCanvas";
+import { toDraft } from "../features/floorplan/geometry";
 import type { FefoSuggestion, Product, ProductStock } from "../api/types";
 import ProductSelect from "../components/ProductSelect";
 import { Message, PageTitle, Step, StepBanner, fmtDate } from "../components/ui";
@@ -19,6 +21,9 @@ export default function Outbound() {
   const preset = { productId: Number(params.get("productId")) || null, batchId: Number(params.get("batchId")) || null, locationId: Number(params.get("locationId")) || null };
   const products = useProducts();
   const invalidate = useInvalidateStock();
+  const warehouses = useWarehouses();
+  const allLocs = useAllLocations();
+  const [whId, setWhId] = useState<number | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
@@ -67,7 +72,7 @@ export default function Outbound() {
     if (shortage > 0) return `庫存只有 ${suggest.data!.available} ${product.unit}，不夠 ${shortage} ${product.unit}；請改數量，或只出 ${suggest.data!.available} ${product.unit}`;
     if (over) return "有一筆超過該儲位的數量，請改小";
     if (active.length === 0) return "請在取貨位置填數量";
-    return "到哪裡拿已列出（先出快到期的）；不合適可按「調整」，確認後按「下一步：核對並出庫」";
+    return "取貨位置已在圖上標出（先出快到期的）；不合適可按「調整」或點圖上有這個商品的格子，確認後按「下一步：核對並出庫」";
   })();
 
   const m = useMutation({
@@ -86,6 +91,28 @@ export default function Outbound() {
 
   const setQty = (i: number, q: number) => setLines(lines.map((l, j) => (j === i ? { ...l, quantity: q } : l)));
   const unit = product?.unit ?? "";
+
+  // 平面圖：把要取貨的位置整格標出「取 N 箱」；點圖上有這個商品的格子可以加進來
+  const activeWh = whId ?? (lines.length ? allLocs.data?.find((l) => l.id === lines.find((x) => x.quantity > 0)?.locationId)?.warehouseId : undefined) ?? warehouses.data?.items[0]?.id ?? null;
+  const layout = useLayout(activeWh);
+  const marks = useMemo(() => {
+    const m: Record<string, { label: string; kind: "from" | "to" }> = {};
+    for (const l of lines) if (l.quantity > 0) m[l.locationCode] = { label: `從這裡取 ${l.quantity} ${unit}`, kind: "from" };
+    return m;
+  }, [lines, unit]);
+  const otherCodes = useMemo(() => new Set(lines.filter((l) => l.quantity <= 0).map((l) => l.locationCode)), [lines]);
+  const [mapHint, setMapHint] = useState<string | null>(null);
+  function pickOnMap(code: string | null) {
+    setMapHint(null);
+    if (!code) return;
+    const i = lines.findIndex((l) => l.locationCode === code);
+    if (i < 0) { setMapHint(`${code} 沒有「${product?.name ?? "這個商品"}」，請點有這個商品的格子。`); return; }
+    const l = lines[i];
+    if (l.quantity > 0) { setAdjusting(true); return; }
+    const need = Math.max(0, quantity - total);
+    setQty(i, Math.min(l.available, need > 0 ? need : l.available));
+    setAdjusting(true);
+  }
 
   if (result && product) {
     return (
@@ -171,6 +198,21 @@ export default function Outbound() {
                   )}
                 </div>
               ))}
+            </div>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="muted">取貨位置在圖上：</span>
+                <div className="flex overflow-hidden rounded-[10px] border border-line">
+                  {warehouses.data?.items.map((w) => (
+                    <button key={w.id} type="button" onClick={() => setWhId(w.id)} className={`min-h-[44px] px-4 text-[17px] font-medium ${w.id === activeWh ? "bg-brand-dark text-white" : "bg-white hover:bg-brand-soft"}`}>{w.name}</button>
+                  ))}
+                </div>
+                <span className="muted">黃色＝也有這個商品但這次不取；點它可以加進來</span>
+              </div>
+              {mapHint && <Message kind="warn">{mapHint}</Message>}
+              {layout.data && (
+                <FloorplanCanvas layout={layout.data} racks={toDraft(layout.data)} editing={false} compact selectedLocation={null} selectedRackKey={null} highlightCodes={otherCodes} highlightLabel="也有貨" marks={marks} onSelectLocation={pickOnMap} onSelectRack={() => undefined} onRacksChange={() => undefined} />
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {!preset.locationId && <button type="button" className="btn-sm" onClick={() => setAdjusting(!adjusting)}>{adjusting ? "完成調整" : "調整取貨位置或數量"}</button>}
