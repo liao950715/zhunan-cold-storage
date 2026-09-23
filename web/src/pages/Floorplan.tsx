@@ -127,7 +127,7 @@ export default function Floorplan() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded border border-slate-300 overflow-hidden">
+        <div className="flex overflow-hidden rounded-lg border border-line">
           {warehouses.data!.items.map((w) => (
             <button
               key={w.id}
@@ -136,18 +136,18 @@ export default function Floorplan() {
                 setParams({ warehouse: w.code });
                 setSelectedLocation(null);
               }}
-              className={`px-3 py-1.5 text-sm ${w.code === wh.code ? "bg-sky-600 text-white" : "bg-white hover:bg-slate-50"} disabled:opacity-50`}
+              className={`min-h-[52px] px-5 text-[18px] font-medium ${w.code === wh.code ? "bg-brand text-white" : "bg-white hover:bg-brand-soft"} disabled:opacity-50`}
             >
               {w.name}
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-500">
+        <span className="muted">
           {wh.rackCount} 座貨架 · {wh.locationCount} 個儲位
         </span>
         <div className="ml-auto flex gap-2">
           {!editing ? (
-            <button className="btn-primary" onClick={startEdit}>編輯配置</button>
+            <button className="btn-sm" onClick={startEdit}>調整貨架配置（管理用）</button>
           ) : (
             <>
               <button className="btn" onClick={addRack}>＋ 貨架</button>
@@ -184,7 +184,7 @@ export default function Floorplan() {
         ) : (
           <p className="text-slate-500">載入平面圖…</p>
         )}
-        <aside className="rounded border border-slate-200 bg-white p-4 min-h-40">
+        <aside className="panel min-h-40">
           {!editing && selectedLoc && (
             <LocationPanel
               locationId={selectedLoc.id}
@@ -196,7 +196,7 @@ export default function Floorplan() {
               }}
             />
           )}
-          {!editing && !selectedLoc && <p className="text-sm text-slate-500">點選儲位查看內容。綠色＝有庫存，白色＝空儲位{highlightCodes.size > 0 && "，橘色＝搜尋結果"}。</p>}
+          {!editing && !selectedLoc && <p className="text-[18px] text-ink-2">點一下儲位，就能看到裡面放什麼。<br />綠色＝有貨（會寫商品與數量），白色＝空{highlightCodes.size > 0 && "，橘色＝你找的位置"}。</p>}
           {editing && selectedRack && !selectedLocation && (
             <div className="space-y-2 text-sm">
               <h3 className="font-bold">貨架 {selectedRack.code}</h3>

@@ -1,31 +1,29 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock, useProducts } from "../api/hooks";
 import type { FefoSuggestion, Product, ProductStock } from "../api/types";
 import ProductSelect from "../components/ProductSelect";
-import { Card, Field, Message, PageTitle } from "../components/ui";
-import { useDialog } from "../components/ConfirmDialog";
+import { Message, PageTitle, Step, fmtDate } from "../components/ui";
 
 interface Line { batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; quantity: number }
 
 /**
- * 雙入口出庫（FR-011／012）：
- * 入口 A：選商品 → 輸入數量 → FEFO 建議 → 人工確認批次與儲位。
- * 入口 B：由平面圖／查詢帶 ?productId=&batchId=&locationId=，直接列出該儲位批次。
+ * 出庫（FR-011／012）：要出什麼 → 要出多少 → 到哪裡拿（系統建議先拿快到期的，可調整）→ 確認出庫。
+ * 從平面圖／查詢帶 ?productId=&batchId=&locationId= 進來時，直接列出該儲位。
  */
 export default function Outbound() {
   const [params] = useSearchParams();
   const preset = { productId: Number(params.get("productId")) || null, batchId: Number(params.get("batchId")) || null, locationId: Number(params.get("locationId")) || null };
   const products = useProducts();
   const invalidate = useInvalidateStock();
-  const dialog = useDialog();
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
-  const [note, setNote] = useState("");
-  const [result, setResult] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<Line[] | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
@@ -39,81 +37,139 @@ export default function Outbound() {
     if (!stock.data || lines.length > 0 || !preset.locationId) return;
     const rows = stock.data.lines.filter((l) => l.location.id === preset.locationId && (!preset.batchId || l.batch.id === preset.batchId));
     setLines(rows.map((l) => ({ batchId: l.batch.id, batchNo: l.batch.batchNo, expiryDate: l.batch.expiryDate, expired: false, locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 })));
+    setAdjusting(true);
   }, [stock.data, preset.locationId, preset.batchId, lines.length]);
 
   const suggest = useMutation({
-    mutationFn: () => post<FefoSuggestion>("/stock/outbound/suggest", { productId: product!.id, quantity }),
+    mutationFn: (qty: number) => post<FefoSuggestion>("/stock/outbound/suggest", { productId: product!.id, quantity: qty }),
     onSuccess: (s) => setLines(s.suggestions.map((x) => ({ ...x, quantity: x.take }))),
   });
+
+  // 填好數量就自動給建議（不需再按按鈕）
+  useEffect(() => {
+    if (!product || quantity <= 0 || preset.locationId) return;
+    const t = setTimeout(() => suggest.mutate(quantity), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, quantity]);
 
   const total = lines.reduce((s, l) => s + (l.quantity || 0), 0);
   const over = lines.some((l) => l.quantity > l.available);
   const active = lines.filter((l) => l.quantity > 0);
+  const shortage = suggest.data?.shortage ?? 0;
 
   const m = useMutation({
-    mutationFn: () => post<{ total: number }>("/stock/outbound", { productId: product!.id, lines: active.map((l) => ({ batchId: l.batchId, locationId: l.locationId, quantity: l.quantity })), note: note || null }, idemKey),
-    onSuccess: async (r) => {
-      setResult(`出庫完成：${product!.name} 共 ${r.total} ${product!.unit}（${active.map((l) => `${l.locationCode} ${l.batchNo} −${l.quantity}`).join("、")}）`);
+    mutationFn: () => post<{ total: number }>("/stock/outbound", { productId: product!.id, lines: active.map((l) => ({ batchId: l.batchId, locationId: l.locationId, quantity: l.quantity })) }, idemKey),
+    onSuccess: async () => {
+      setResult(active);
       await invalidate();
       setIdemKey(crypto.randomUUID());
+      setConfirming(false);
       setLines([]);
       setQuantity(0);
+      suggest.reset();
     },
+    onError: () => setConfirming(false),
   });
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (active.length === 0 || over) return;
-    if (await dialog.confirm("確認出庫", `${product!.name} 共 ${total} ${product!.unit}\n` + active.map((l) => `・${l.locationCode} 批次 ${l.batchNo} −${l.quantity}`).join("\n"))) m.mutate();
+  const setQty = (i: number, q: number) => setLines(lines.map((l, j) => (j === i ? { ...l, quantity: q } : l)));
+  const unit = product?.unit ?? "";
+
+  if (result && product) {
+    return (
+      <div className="space-y-5">
+        <PageTitle>出庫完成</PageTitle>
+        <div className="panel space-y-3 border-l-8 border-ok">
+          <p className="text-[26px] font-bold text-ok">✓ 出庫完成</p>
+          <p className="text-[22px] font-bold">{product.name}，共 {result.reduce((s, l) => s + l.quantity, 0)} {unit}</p>
+          {result.map((l) => <p key={`${l.batchId}-${l.locationId}`} className="text-[20px]">從 <b>{l.locationCode}</b> 取 {l.quantity} {unit}<span className="muted">（批次 {l.batchNo}）</span></p>)}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button className="btn-primary" onClick={() => setResult(null)}>再出庫一筆</button>
+          <Link className="btn" to={`/inventory?q=${encodeURIComponent(product.name)}`}>查看剩餘庫存</Link>
+          <Link className="btn" to="/">回首頁</Link>
+        </div>
+      </div>
+    );
   }
 
-  const setQty = (i: number, q: number) => setLines(lines.map((l, j) => (j === i ? { ...l, quantity: q } : l)));
+  if (confirming && product) {
+    return (
+      <div className="space-y-5">
+        <PageTitle sub="請核對取貨位置與數量">確認出庫</PageTitle>
+        <div className="panel space-y-3">
+          <p className="text-[26px] font-bold">{product.name}，出庫 {total} {unit}</p>
+          {active.map((l) => (
+            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b> 取 {l.quantity} {unit}<span className="ml-2 muted">到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
+          ))}
+        </div>
+        {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
+        <div className="flex flex-wrap gap-3">
+          <button className="btn" onClick={() => setConfirming(false)}>返回修改</button>
+          <button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending}>{m.isPending ? "出庫中…" : "確認出庫"}</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      <PageTitle sub={preset.locationId ? "從儲位出庫：批次已帶入，請填數量" : "快速出庫：選商品 → 輸入數量 → 查看 FEFO 建議 → 確認"}>出庫</PageTitle>
-      {result && <Message kind="ok">{result}</Message>}
-      <form onSubmit={submit} className="grid gap-3 lg:grid-cols-2">
-        <Card title="1. 商品">
-          <ProductSelect value={product?.id ?? null} onChange={(p) => { setProduct(p); setLines([]); }} allowCreate={false} />
-          {stock.data && <p className="mt-2 text-sm text-slate-600">目前可用 <b>{stock.data.total} {stock.data.product.unit}</b>，{stock.data.batches.length} 個批次</p>}
-        </Card>
-        <Card title="2. 數量與 FEFO 建議">
-          <div className="flex items-end gap-2">
-            <Field label={`出庫數量（${product?.unit ?? "單位"}）`}><input type="number" min={1} className="input" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} /></Field>
-            <button type="button" className="btn-primary" disabled={!product || quantity <= 0 || suggest.isPending} onClick={() => suggest.mutate()}>取得 FEFO 建議</button>
+    <div className="space-y-5">
+      <PageTitle sub={preset.locationId ? "從這個儲位取貨：請填數量" : "要出什麼 → 要出多少 → 到哪裡拿 → 確認"}>出庫</PageTitle>
+      {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
+
+      <Step n={1} title="要出什麼？" done={!!product}>
+        <ProductSelect value={product?.id ?? null} onChange={(p) => { setProduct(p); setLines([]); suggest.reset(); }} allowCreate={false} />
+        {stock.data && <p className="mt-3 text-[20px]">目前有 <b>{stock.data.total} {stock.data.product.unit}</b>，分在 {stock.data.lines.length} 個儲位</p>}
+      </Step>
+
+      {!preset.locationId && (
+        <Step n={2} title="要出多少？" done={quantity > 0}>
+          <div className="flex items-center gap-3">
+            <input type="number" min={1} inputMode="numeric" className="input mt-0 max-w-[200px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} disabled={!product} aria-label="出庫數量" />
+            <span className="text-[24px] font-bold">{unit}</span>
           </div>
-          {suggest.data && suggest.data.shortage > 0 && <Message kind="warn">可用 {suggest.data.available}，不足 {suggest.data.shortage} {product?.unit}；請調整數量或只出可用量。</Message>}
-          {suggest.error && <Message kind="error">{errorMessage(suggest.error)}</Message>}
-          <p className="mt-2 text-xs text-slate-500">FEFO＝先到期先出。建議可修改，最終由您確認每個批次與儲位的數量。</p>
-        </Card>
-        <Card title="3. 確認批次與儲位" className="lg:col-span-2">
-          {lines.length === 0 ? (
-            <p className="text-sm text-slate-500">尚無明細。按「取得 FEFO 建議」或從平面圖／查詢進入。</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">儲位</th><th>批次</th><th>到期日</th><th className="text-right">可用</th><th className="text-right w-32">出庫數量</th></tr></thead>
-              <tbody>
-                {lines.map((l, i) => (
-                  <tr key={`${l.batchId}-${l.locationId}`} className={`border-t border-slate-100 ${l.quantity > 0 ? "bg-sky-50" : ""}`}>
-                    <td className="py-1 font-medium">{l.locationCode}</td>
-                    <td className="font-mono text-xs">{l.batchNo}</td>
-                    <td className={l.expired ? "text-red-600" : ""}>{l.expiryDate}{l.expired && "（已過期）"}</td>
-                    <td className="text-right">{l.available}</td>
-                    <td className="text-right"><input type="number" min={0} max={l.available} className={`input mt-0 text-right ${l.quantity > l.available ? "border-red-500" : ""}`} value={l.quantity || ""} onChange={(e) => setQty(i, Number(e.target.value))} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Field label="備註"><input className="input mt-0 w-64" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-            <p className={`text-sm ${over ? "text-red-600" : ""}`}>合計出庫 <b>{total}</b> {product?.unit}{over && "　— 有明細超過可用量"}</p>
-            {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
-            <button type="submit" className="btn-primary ml-auto" disabled={active.length === 0 || over || m.isPending}>{m.isPending ? "送出中…" : "確認出庫"}</button>
+          {shortage > 0 && <Message kind="warn">庫存只有 {suggest.data!.available} {unit}，不夠 {shortage} {unit}。可以先出 {suggest.data!.available} {unit}，或改數量。</Message>}
+        </Step>
+      )}
+
+      <Step n={preset.locationId ? 2 : 3} title="到哪裡拿？" done={active.length > 0 && !over}>
+        {lines.length === 0 ? (
+          <p className="muted">{product ? "填好數量後，這裡會列出建議的取貨位置（先拿快到期的）。" : "請先選商品。"}</p>
+        ) : (
+          <div className="space-y-3">
+            {!preset.locationId && <p className="muted">系統建議優先出即將到期的貨；不合適可以按「調整」。</p>}
+            <div className="divide-y divide-line">
+              {lines.map((l, i) => (
+                <div key={`${l.batchId}-${l.locationId}`} className={`flex flex-wrap items-center gap-3 py-3 ${l.quantity > 0 ? "" : "opacity-60"}`}>
+                  <div className="flex-1">
+                    <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}</p>
+                    <p className="muted">
+                      這裡有 {l.available} {unit}・到期 {fmtDate(l.expiryDate)}
+                      {l.expired && <span className="tag-bad ml-2">已過期</span>}
+                      <span className="ml-2">批次 {l.batchNo}</span>
+                    </p>
+                  </div>
+                  {adjusting && (
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={l.available} inputMode="numeric" className={`input mt-0 w-28 text-[22px] font-bold ${l.quantity > l.available ? "border-bad" : ""}`} value={l.quantity || ""} onChange={(e) => setQty(i, Number(e.target.value))} aria-label={`${l.locationCode} 出庫數量`} />
+                      <span className="text-[20px]">{unit}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {!preset.locationId && <button type="button" className="btn-sm" onClick={() => setAdjusting(!adjusting)}>{adjusting ? "完成調整" : "調整取貨位置或數量"}</button>}
+              <span className={`text-[18px] ${over ? "font-bold text-bad" : ""}`}>合計 {total} {unit}{over && "　— 有一筆超過該儲位的數量"}</span>
+            </div>
           </div>
-        </Card>
-      </form>
+        )}
+      </Step>
+
+      <Step n={preset.locationId ? 3 : 4} title="確認出庫">
+        {active.length === 0 ? <p className="text-warn">請先完成上面的步驟。</p> : over ? <p className="text-bad">請把超過的數量改小。</p> : <p className="text-[20px]"><b>{product!.name}</b> 共 {total} {unit}，從 {active.map((l) => l.locationCode).join("、")} 取</p>}
+        <button type="button" className="btn-primary mt-4 w-full sm:w-auto" disabled={active.length === 0 || over} onClick={() => setConfirming(true)}>下一步：核對並出庫</button>
+      </Step>
     </div>
   );
 }

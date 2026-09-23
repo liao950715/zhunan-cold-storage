@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { errorMessage } from "../api/client";
+import { Field, Message } from "../components/ui";
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -20,8 +21,7 @@ export default function Login() {
     setError(null);
     try {
       await login(username, password);
-      const to = (loc.state as { from?: string } | null)?.from ?? "/";
-      nav(to, { replace: true });
+      nav((loc.state as { from?: string } | null)?.from ?? "/", { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -30,24 +30,16 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <form onSubmit={onSubmit} className="w-full max-w-sm bg-white rounded-xl shadow p-6 space-y-4">
+    <main className="flex min-h-screen items-center justify-center bg-bg px-4">
+      <form onSubmit={onSubmit} className="panel w-full max-w-md space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">竹南冷凍倉儲</h1>
-          <p className="text-sm text-slate-500">庫存管理系統登入</p>
+          <h1 className="text-[30px] font-bold">竹南冷凍倉儲</h1>
+          <p className="text-[18px] text-ink-2">庫存管理系統</p>
         </div>
-        <label className="block text-sm">
-          <span className="text-slate-700">帳號</span>
-          <input className="mt-1 w-full rounded border border-slate-300 px-3 py-2" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
-        </label>
-        <label className="block text-sm">
-          <span className="text-slate-700">密碼</span>
-          <input type="password" className="mt-1 w-full rounded border border-slate-300 px-3 py-2" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </label>
-        {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-        <button type="submit" disabled={busy} className="w-full rounded bg-sky-600 py-2 text-white font-medium hover:bg-sky-700 disabled:opacity-50">
-          {busy ? "登入中…" : "登入"}
-        </button>
+        <Field label="帳號"><input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required /></Field>
+        <Field label="密碼"><input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></Field>
+        {error && <Message kind="error">{error}</Message>}
+        <button type="submit" disabled={busy} className="btn-primary w-full">{busy ? "登入中…" : "登入"}</button>
       </form>
     </main>
   );
