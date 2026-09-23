@@ -83,41 +83,39 @@ export async function seedBase(prisma: PrismaClient) {
   }
 }
 
-/** 展示用初始庫存：少量既有批次（含一筆即將到期）以呈現 Dashboard 提醒。Stage 2 完成 stockService 後改由入庫 API 產生。 */
+/**
+ * 展示用初始庫存：透過正式入庫服務（stockService.inbound）產生，遵守全部業務規則。
+ * 只在尚無任何批次時執行（避免重複 seed 疊加庫存）。
+ */
 export async function seedDemoStock(prisma: PrismaClient) {
+  if ((await prisma.batch.count()) > 0) return;
+  const { inbound } = await import("../src/services/stockService.js");
   const admin = await prisma.user.findUniqueOrThrow({ where: { username: "admin" } });
-  const day = (offset: number) => new Date(Date.UTC(2026, 8, 23 + offset));
-  const rows: Array<[string, string, string, number, number]> = [
-    // 商品, 儲位, 批次號, 到期日偏移(天), 數量
-    ["紅蘿蔔", "A-01-01", "B20260901-001", 20, 12],
-    ["紅蘿蔔", "A-01-02", "B20260901-001", 20, 8],
-    ["馬鈴薯", "A-02-01", "B20260905-001", 40, 18],
-    ["草莓", "B-01-01", "B20260920-001", 3, 6], // 即將到期
-    ["毛豆", "B-02-01", "B20260910-001", 25, 15],
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const rows: Array<{ product: string; receivedOffset: number; expiryOffset: number; allocations: Array<[string, number]> }> = [
+    { product: "紅蘿蔔", receivedOffset: -22, expiryOffset: 20, allocations: [["A-01-01", 12], ["A-01-02", 8]] },
+    { product: "馬鈴薯", receivedOffset: -18, expiryOffset: 40, allocations: [["A-02-01", 18]] },
+    { product: "草莓", receivedOffset: -3, expiryOffset: 3, allocations: [["B-01-01", 6]] }, // 即將到期
+    { product: "毛豆", receivedOffset: -13, expiryOffset: 25, allocations: [["B-02-01", 15]] },
   ];
-  for (const [productName, locationCode, batchNo, expOffset, qty] of rows) {
-    const product = await prisma.product.findUniqueOrThrow({ where: { name: productName } });
-    const location = await prisma.location.findUniqueOrThrow({ where: { code: locationCode } });
-    const batch = await prisma.batch.upsert({
-      where: { batchNo },
-      update: {},
-      create: { batchNo, productId: product.id, receivedDate: day(-15), expiryDate: day(expOffset), initialQty: qty, createdById: admin.id },
-    });
-    await prisma.inventory.upsert({
-      where: { batchId_locationId: { batchId: batch.id, locationId: location.id } },
-      update: {},
-      create: { batchId: batch.id, locationId: location.id, quantity: qty },
-    });
-    const existing = await prisma.stockMovement.findFirst({ where: { batchId: batch.id, toLocationId: location.id, type: "IN" } });
-    if (!existing) {
-      await prisma.stockMovement.create({
-        data: {
-          type: "IN", productId: product.id, batchId: batch.id, toLocationId: location.id, quantity: qty,
-          toBeforeQty: 0, toAfterQty: qty, productNameSnapshot: product.name, locationCodeSnapshot: location.code,
-          referenceType: "SEED", operatorId: admin.id,
-        },
-      });
+  for (const r of rows) {
+    const product = await prisma.product.findUniqueOrThrow({ where: { name: r.product } });
+    const allocations = [];
+    for (const [code, quantity] of r.allocations) {
+      const loc = await prisma.location.findUniqueOrThrow({ where: { code } });
+      allocations.push({ locationId: loc.id, quantity });
     }
+    await inbound(
+      {
+        productId: product.id,
+        quantity: allocations.reduce((s, a) => s + a.quantity, 0),
+        receivedDate: day(r.receivedOffset),
+        expiryDate: day(r.expiryOffset),
+        note: "示範資料",
+        allocations,
+      },
+      { operator: { id: admin.id } },
+    );
   }
 }
 
