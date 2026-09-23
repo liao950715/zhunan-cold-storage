@@ -153,20 +153,7 @@ export default function Transfer() {
             </div>
           )}
           {line && (
-            {/* 最後確認 */}
-      {phase === "confirm" && fromLoc && toLoc && line && (
-        <div className="panel space-y-3 border-l-8 border-brand">
-          <p className="text-[26px] font-bold">{line.product.name} {quantity} {line.product.unit}，從 {fromLoc.code} → {toLoc.code}</p>
-          <p className="muted">批次 {line.batch.batchNo}・{locationWords(fromLoc.code)} → {locationWords(toLoc.code)}・商品總量不變</p>
-          {!qtyOk && <p className="text-warn">請回上面填好數量。</p>}
-          <div className="flex flex-wrap gap-3">
-            <button type="button" className="btn" onClick={changeTo}>更換搬到位置</button>
-            <button type="button" className="btn-primary" disabled={!qtyOk || m.isPending} onClick={() => m.mutate()}>{m.isPending ? "搬移中…" : "確認搬移"}</button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-[18px]">搬多少：</span>
               <input type="number" min={1} max={line.quantity} inputMode="numeric" className="input mt-0 max-w-[180px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="搬移數量" />
               <span className="text-[24px] font-bold">{line.product.unit}</span>
@@ -177,6 +164,19 @@ export default function Transfer() {
           {phase === "batch" && (
             <button type="button" className="btn-primary" disabled={!qtyOk} onClick={() => setPhase("to")}>{qtyOk ? "下一步：選搬到哪裡" : "請先填好批次與數量"}</button>
           )}
+        </div>
+      )}
+
+      {/* 最後確認（緊接在批次數量下方，要改數量不必往下滑） */}
+      {phase === "confirm" && fromLoc && toLoc && line && (
+        <div className="panel space-y-3 border-l-8 border-[#754000]">
+          <p className="text-[26px] font-bold">{line.product.name} {quantity} {line.product.unit}，從 {fromLoc.code} → {toLoc.code}</p>
+          <p className="muted">批次 {line.batch.batchNo}・{locationWords(fromLoc.code)} → {locationWords(toLoc.code)}・商品總量不變</p>
+          {!qtyOk && <p className="text-warn">請先在上面填好數量。</p>}
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="btn" onClick={changeTo}>更換搬到位置</button>
+            <button type="button" className="btn-primary" disabled={!qtyOk || m.isPending} onClick={() => m.mutate()}>{m.isPending ? "搬移中…" : "確認搬移"}</button>
+          </div>
         </div>
       )}
 
