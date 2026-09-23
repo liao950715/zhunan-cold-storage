@@ -11,6 +11,7 @@ import { locationsRouter } from "./routes/locations.js";
 import { searchRouter } from "./routes/search.js";
 import { stockRouter } from "./routes/stock.js";
 import { movementsRouter } from "./routes/movements.js";
+import { locationDeleteRouter, racksRouter, warehouseLayoutRouter } from "./routes/layout.js";
 
 /** 建立 Express app（不 listen），供 index.ts 與 Supertest 共用。 */
 export function createApp() {
@@ -19,7 +20,7 @@ export function createApp() {
   app.use(cookieParser());
 
   app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", service: "zhunan-cold-storage", stage: 2});
+    res.json({ status: "ok", service: "zhunan-cold-storage", stage: 3});
   });
 
   app.use("/api/auth", authRouter);
@@ -29,7 +30,10 @@ export function createApp() {
   app.use("/api/users", requireRole("ADMIN"), usersRouter);
   app.use("/api/products", productsRouter);
   app.use("/api/batches", batchesRouter);
+  app.use("/api/warehouses/:id/layout", warehouseLayoutRouter);
   app.use("/api/warehouses", warehousesRouter);
+  app.use("/api/racks", racksRouter);
+  app.use("/api/locations", locationDeleteRouter);
   app.use("/api/locations", locationsRouter);
   app.use("/api/search", searchRouter);
   app.use("/api/stock", stockRouter);
