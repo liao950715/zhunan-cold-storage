@@ -136,19 +136,6 @@ export default function Transfer() {
 
       {/* 目前步驟 ＋ 共用平面圖 */}
       <div className="rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[20px] font-bold">目前步驟：{stepText[phase]}</div>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex overflow-hidden rounded-[10px] border border-line">
-          {warehouses.data?.items.map((w) => (
-            <button key={w.id} type="button" onClick={() => setWhId(w.id)} className={`min-h-[52px] px-5 text-[18px] font-medium ${w.id === activeWh ? "bg-brand-dark text-white" : "bg-white hover:bg-brand-soft"}`}>{w.name}</button>
-          ))}
-        </div>
-        <span className="muted">起點與終點可以在不同冷凍庫；上方摘要會一直保留。</span>
-        <button type="button" className="btn-sm ml-auto" onClick={resetAll} disabled={!fromId && !toId}>清除重選</button>
-      </div>
-      {hint && <Message kind="warn">{hint}</Message>}
-      {layout.data && (
-        <FloorplanCanvas layout={layout.data} racks={toDraft(layout.data)} editing={false} selectedLocation={null} selectedRackKey={null} highlightCodes={new Set()} marks={marks} onSelectLocation={pick} onSelectRack={() => undefined} onRacksChange={() => undefined} />
-      )}
 
       {/* 批次與數量（起點選好後） */}
       {fromLoc && from.data && (
@@ -178,6 +165,20 @@ export default function Transfer() {
             <button type="button" className="btn-primary" disabled={!qtyOk} onClick={() => setPhase("to")}>{qtyOk ? "下一步：選搬到哪裡" : "請先填好批次與數量"}</button>
           )}
         </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex overflow-hidden rounded-[10px] border border-line">
+          {warehouses.data?.items.map((w) => (
+            <button key={w.id} type="button" onClick={() => setWhId(w.id)} className={`min-h-[52px] px-5 text-[18px] font-medium ${w.id === activeWh ? "bg-brand-dark text-white" : "bg-white hover:bg-brand-soft"}`}>{w.name}</button>
+          ))}
+        </div>
+        <span className="muted">起點與終點可以在不同冷凍庫；上方摘要會一直保留。</span>
+        <button type="button" className="btn-sm ml-auto" onClick={resetAll} disabled={!fromId && !toId}>清除重選</button>
+      </div>
+      {hint && <Message kind="warn">{hint}</Message>}
+      {layout.data && (
+        <FloorplanCanvas layout={layout.data} racks={toDraft(layout.data)} editing={false} selectedLocation={null} selectedRackKey={null} highlightCodes={new Set()} marks={marks} onSelectLocation={pick} onSelectRack={() => undefined} onRacksChange={() => undefined} />
       )}
 
       {/* 最後確認 */}
