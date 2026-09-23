@@ -92,11 +92,11 @@ export default function Shell() {
       <div>
         {/* 手機／平板頂部 */}
         <header className="border-b border-line bg-white lg:hidden">
-          <div className="flex items-center gap-3 px-4 py-2 text-[16px] text-ink-2">
-            <span className="text-[18px] font-bold text-ink">竹南冷凍倉儲</span>
-            <span className="ml-auto">{user.displayName}</span>
-            <label className="flex items-center gap-1"><input type="checkbox" checked={large} onChange={(e) => setLarge(e.target.checked)} /> 放大</label>
-            <button onClick={logout} className="btn-sm gap-1"><LogoutIcon size={18} />登出</button>
+          <div className="flex items-center gap-2 px-3 py-2 text-[16px] text-ink-2">
+            <span className="whitespace-nowrap text-[18px] font-bold text-ink">竹南冷凍倉儲</span>
+            <span className="ml-auto min-w-0 truncate">{user.displayName}</span>
+            <label className="flex shrink-0 items-center gap-1 whitespace-nowrap"><input type="checkbox" checked={large} onChange={(e) => setLarge(e.target.checked)} /> 放大</label>
+            <button onClick={logout} className="btn-sm shrink-0 gap-1 whitespace-nowrap"><LogoutIcon size={18} />登出</button>
           </div>
           <nav className="grid grid-cols-5 gap-1 px-2 pb-2" aria-label="主選單">
             {MAIN.map((i) => link(i, true))}

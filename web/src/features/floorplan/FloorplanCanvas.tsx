@@ -47,7 +47,8 @@ export default function FloorplanCanvas(p: CanvasProps) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const fit = () => setScale(Math.max(0.2, Math.min(1.6, (el.clientWidth - 2) / p.layout.width)));
+    // 手機太窄時不再縮小（字會看不清），改成可左右滑動
+    const fit = () => setScale(Math.max(0.55, Math.min(1.6, (el.clientWidth - 2) / p.layout.width)));
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
@@ -67,7 +68,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
   const clearSel = () => { p.onSelectLocation(null); p.onSelectRack(null); };
 
   return (
-    <div ref={containerRef} className={`w-full overflow-hidden rounded-[14px] bg-white touch-none ${p.editing ? "border-2 border-dashed border-brand" : "border border-line"}`}>
+    <div ref={containerRef} className={`w-full overflow-x-auto overflow-y-hidden rounded-[14px] bg-white ${p.editing ? "border-2 border-dashed border-brand" : "border border-line"}`}>
       <Stage width={W * scale} height={H * scale} scaleX={scale} scaleY={scale}
         onClick={(e) => { if (e.target === e.target.getStage()) clearSel(); }}
         onTap={(e) => { if (e.target === e.target.getStage()) clearSel(); }}>
