@@ -5,7 +5,7 @@ import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock } from "../api/hooks";
 import type { LocationDetail, Movement } from "../api/types";
 import LocationSelect from "../components/LocationSelect";
-import { Card, Field, Message, PageTitle, Step, fmtDate, fmtTime } from "../components/ui";
+import { Card, Field, Message, PageTitle, Step, StepBanner, fmtDate, fmtTime } from "../components/ui";
 import { locationLabel } from "../lib/words";
 
 const REASONS = ["凍傷", "壓損", "腐爛", "包裝破損", "其他"];
@@ -27,6 +27,15 @@ export default function Damage() {
   if (line && batchId !== line.batch.id) setBatchId(line.batch.id);
   const history = useQuery({ queryKey: ["movements", "DAMAGE"], queryFn: () => get<{ items: Movement[] }>("/movements?type=DAMAGE&limit=10") });
   const ok = !!line && quantity > 0 && quantity <= line.quantity && reason.trim().length > 0;
+  const stepText = (() => {
+    if (!locId) return "請先選儲位：哪個儲位的貨壞了？";
+    if (loc.data && loc.data.lines.length === 0) return "這個儲位沒有貨，請選別的儲位";
+    if (!line) return "請選是哪一批";
+    if (quantity <= 0) return `請填報損數量（單位：${line.product.unit}）`;
+    if (quantity > line.quantity) return `最多只能報損 ${line.quantity} ${line.product.unit}，請改小`;
+    if (!reason.trim()) return "請選原因（或選「其他」後說明）";
+    return "請按「下一步：核對並報損」";
+  })();
 
   const m = useMutation({
     mutationFn: () => post<{ batchNo: string; locationCode: string; after: number }>("/stock/damage", { batchId: line!.batch.id, locationId: locId, quantity, reason: reason.trim() }, idemKey),
@@ -51,7 +60,8 @@ export default function Damage() {
   if (confirming && line && loc.data) {
     return (
       <div className="space-y-5">
-        <PageTitle sub="確認後會立即扣除庫存，無法取消">確認報損</PageTitle>
+        <PageTitle>確認報損</PageTitle>
+        <StepBanner>請核對，按「確認報損」會立即扣除庫存，無法取消</StepBanner>
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{line.product.name}，報損 {quantity} {line.product.unit}</p>
           <p className="text-[22px]">在 <b>{locationLabel(loc.data.location.code)}</b></p>
@@ -67,6 +77,7 @@ export default function Damage() {
   return (
     <div className="space-y-5">
       <PageTitle sub="登記損壞的貨；確認後立即從庫存扣除並留下紀錄">報損</PageTitle>
+      <StepBanner>{stepText}</StepBanner>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
       <Step n={1} title="哪個儲位的貨？" done={!!loc.data && loc.data.lines.length > 0}>
         <LocationSelect value={locId} onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); setQuantity(0); }} />

@@ -6,7 +6,7 @@ import { addDays, todayStr, useAllLocations, useInvalidateStock, useProducts } f
 import type { Product } from "../api/types";
 import LocationPicker from "../components/LocationPicker";
 import ProductSelect from "../components/ProductSelect";
-import { Collapsible, Field, Message, PageTitle, Step, fmtDate } from "../components/ui";
+import { Collapsible, Field, Message, PageTitle, Step, StepBanner, fmtDate } from "../components/ui";
 import { locationWords } from "../lib/words";
 
 interface Alloc { locationId: number | null; quantity: number }
@@ -55,6 +55,18 @@ export default function Inbound() {
   if (allocs.some((a) => !a.locationId)) missing.push("選擇放置位置");
   if (split && allocs.some((a) => a.quantity <= 0)) missing.push("填每個儲位的數量");
   if (mismatch) missing.push(`分配合計 ${allocated} 要等於入庫量 ${quantity}`);
+
+  const stepText = (() => {
+    if (!product) return "請先選擇商品（找不到可以按「找不到？新增商品」）";
+    if (quantity <= 0) return `請輸入數量（單位：${product.unit}）`;
+    if (!expiryDate) return "請確認到期日";
+    const missingLoc = allocs.findIndex((a) => !a.locationId);
+    if (missingLoc >= 0) return split ? `請選第 ${missingLoc + 1} 個儲位（用下拉或直接點圖上的格子）` : "請選放置位置（用下拉或直接點圖上的格子）";
+    const missingQty = allocs.findIndex((a) => a.quantity <= 0);
+    if (split && missingQty >= 0) return `請填第 ${missingQty + 1} 個儲位要放多少`;
+    if (mismatch) return allocated < quantity ? `還有 ${quantity - allocated} ${product.unit} 沒分配，請填到儲位裡` : `多分配了 ${allocated - quantity} ${product.unit}，請減少`;
+    return "資料都填好了，請按「下一步：核對並入庫」";
+  })();
 
   const capacityWarnings = allocs.flatMap((a) => {
     const loc = locName(a.locationId);
@@ -105,7 +117,8 @@ export default function Inbound() {
   if (confirming && product) {
     return (
       <div className="space-y-5">
-        <PageTitle sub="請核對下面的資料">確認入庫</PageTitle>
+        <PageTitle>確認入庫</PageTitle>
+        <StepBanner>請核對下面的資料，按「確認入庫」才會真的入庫</StepBanner>
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{product.name}，入庫 {quantity} {product.unit}</p>
           {allocs.map((a, i) => {
@@ -127,6 +140,7 @@ export default function Inbound() {
   return (
     <div className="space-y-5">
       <PageTitle sub={presetLocation ? `放置位置已選好：${locName(presetLocation)?.code ?? ""}` : "照順序填好，最後核對再入庫"}>入庫</PageTitle>
+      <StepBanner>{stepText}</StepBanner>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
 
       <Step n={1} title="選擇商品" done={!!product}>

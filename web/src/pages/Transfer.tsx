@@ -6,7 +6,7 @@ import { useAllLocations, useInvalidateStock, useLayout, useWarehouses } from ".
 import type { LocationDetail } from "../api/types";
 import FloorplanCanvas from "../features/floorplan/FloorplanCanvas";
 import { toDraft } from "../features/floorplan/geometry";
-import { Message, PageTitle, fmtDate } from "../components/ui";
+import { Message, PageTitle, StepBanner, fmtDate } from "../components/ui";
 import { locationWords } from "../lib/words";
 
 type Phase = "from" | "batch" | "to" | "confirm";
@@ -135,7 +135,7 @@ export default function Transfer() {
       </div>
 
       {/* 目前步驟 ＋ 共用平面圖 */}
-      <div className="rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[20px] font-bold">目前步驟：{stepText[phase]}</div>
+      <StepBanner>{stepText[phase]}</StepBanner>
 
       {/* 批次與數量（起點選好後） */}
       {fromLoc && from.data && (

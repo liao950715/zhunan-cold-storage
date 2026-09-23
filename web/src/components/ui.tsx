@@ -58,6 +58,11 @@ export function Step({ n, title, children, done }: { n: number; title: ReactNode
   );
 }
 
+/** 「目前步驟」提示列：一句話說現在要做什麼；放在頁面標題正下方。 */
+export function StepBanner({ children }: { children: ReactNode }) {
+  return <div role="status" aria-live="polite" className="rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[20px] font-bold">目前步驟：{children}</div>;
+}
+
 export function Collapsible({ label, children, defaultOpen = false }: { label: string; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (

@@ -4,7 +4,7 @@ import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock, useWarehouses } from "../api/hooks";
 import type { BaselineItem, Stocktake as StocktakeT } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
-import { Card, Message, PageTitle, fmtTime } from "../components/ui";
+import { Card, Message, PageTitle, StepBanner, fmtTime } from "../components/ui";
 import { useDialog } from "../components/ConfirmDialog";
 
 const STATUS: Record<StocktakeT["status"], string> = { PENDING: "待核准", APPROVED: "已核准", REJECTED: "已退回" };
@@ -31,6 +31,11 @@ export default function Stocktake() {
   return (
     <div className="space-y-3">
       <PageTitle sub="工作人員提交實際清點數量；只有管理員核准後才調整正式庫存">盤點管理</PageTitle>
+      {tab === "list" && (() => {
+        const pending = list.data?.items.filter((s) => s.status === "PENDING").length ?? 0;
+        if (pending === 0) return <StepBanner>目前沒有待核准的盤點；要盤點請按「＋ 新盤點」</StepBanner>;
+        return <StepBanner>{user?.role === "ADMIN" ? `有 ${pending} 張待核准，請按「明細」核對差異後核准或退回` : `有 ${pending} 張等待管理員核准，正式庫存尚未變動`}</StepBanner>;
+      })()}
       <div className="flex gap-2">
         <button className={tab === "list" ? "btn-primary" : "btn"} onClick={() => setTab("list")}>盤點單</button>
         <button className={tab === "new" ? "btn-primary" : "btn"} onClick={() => setTab("new")}>＋ 新盤點</button>
@@ -108,6 +113,8 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
   const diffs = baseline.data?.items.filter((b) => counted(b) !== b.systemQty).length ?? 0;
 
   return (
+    <>
+    <StepBanner>{baseline.data && baseline.data.items.length === 0 ? "此範圍沒有庫存可盤點，請換範圍" : diffs === 0 ? "請逐格填實盤數量，相符的不用改；填完按「提交盤點」" : `已有 ${diffs} 筆與系統不同；確認後按「提交盤點」，提交後要等管理員核准`}</StepBanner>
     <Card title="新盤點：填入實際清點數量（預設為系統數量）">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         範圍：
@@ -143,5 +150,6 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
         <button className="btn-primary ml-auto" disabled={!baseline.data?.items.length || submit.isPending} onClick={async () => { if (await dialog.confirm("提交盤點", `${baseline.data!.items.length} 筆明細，${diffs} 筆差異。\n提交後不會立即改庫存，需管理員核准。`)) submit.mutate(); }}>提交盤點</button>
       </div>
     </Card>
+    </>
   );
 }

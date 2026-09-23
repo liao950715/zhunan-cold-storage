@@ -5,7 +5,7 @@ import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock, useProducts } from "../api/hooks";
 import type { FefoSuggestion, Product, ProductStock } from "../api/types";
 import ProductSelect from "../components/ProductSelect";
-import { Message, PageTitle, Step, fmtDate } from "../components/ui";
+import { Message, PageTitle, Step, StepBanner, fmtDate } from "../components/ui";
 import { locationWords } from "../lib/words";
 
 interface Line { batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; quantity: number }
@@ -59,6 +59,17 @@ export default function Outbound() {
   const active = lines.filter((l) => l.quantity > 0);
   const shortage = suggest.data?.shortage ?? 0;
 
+  const stepText = (() => {
+    if (!product) return "要出什麼？請先選商品";
+    if (preset.locationId) return lines.length === 0 ? "正在讀取這個儲位的貨…" : active.length === 0 ? `要出多少？請在取貨位置填數量（單位：${product.unit}）` : over ? "有一筆超過該儲位的數量，請改小" : "請核對後按「下一步：核對並出庫」";
+    if (quantity <= 0) return `要出多少？填數量後會自動列出建議的取貨位置（單位：${product.unit}）`;
+    if (suggest.isPending || (lines.length === 0 && !suggest.data)) return "正在找建議的取貨位置…";
+    if (shortage > 0) return `庫存只有 ${suggest.data!.available} ${product.unit}，不夠 ${shortage} ${product.unit}；請改數量，或只出 ${suggest.data!.available} ${product.unit}`;
+    if (over) return "有一筆超過該儲位的數量，請改小";
+    if (active.length === 0) return "請在取貨位置填數量";
+    return "到哪裡拿已列出（先出快到期的）；不合適可按「調整」，確認後按「下一步：核對並出庫」";
+  })();
+
   const m = useMutation({
     mutationFn: () => post<{ total: number }>("/stock/outbound", { productId: product!.id, lines: active.map((l) => ({ batchId: l.batchId, locationId: l.locationId, quantity: l.quantity })) }, idemKey),
     onSuccess: async () => {
@@ -97,7 +108,8 @@ export default function Outbound() {
   if (confirming && product) {
     return (
       <div className="space-y-5">
-        <PageTitle sub="請核對取貨位置與數量">確認出庫</PageTitle>
+        <PageTitle>確認出庫</PageTitle>
+        <StepBanner>請核對取貨位置與數量，按「確認出庫」才會真的扣庫存</StepBanner>
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{product.name}，出庫 {total} {unit}</p>
           {active.map((l) => (
@@ -116,6 +128,7 @@ export default function Outbound() {
   return (
     <div className="space-y-5">
       <PageTitle sub={preset.locationId ? "從這個儲位取貨：請填數量" : "要出什麼 → 要出多少 → 到哪裡拿 → 確認"}>出庫</PageTitle>
+      <StepBanner>{stepText}</StepBanner>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
 
       <Step n={1} title="要出什麼？" done={!!product}>
