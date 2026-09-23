@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock } from "../api/hooks";
 import type { LocationDetail, Movement } from "../api/types";
-import LocationSelect from "../components/LocationSelect";
+import LocationPicker from "../components/LocationPicker";
 import { Card, Field, Message, PageTitle, Step, StepBanner, fmtDate, fmtTime } from "../components/ui";
 import { locationLabel } from "../lib/words";
 
@@ -28,7 +28,7 @@ export default function Damage() {
   const history = useQuery({ queryKey: ["movements", "DAMAGE"], queryFn: () => get<{ items: Movement[] }>("/movements?type=DAMAGE&limit=10") });
   const ok = !!line && quantity > 0 && quantity <= line.quantity && reason.trim().length > 0;
   const stepText = (() => {
-    if (!locId) return "請先選儲位：哪個儲位的貨壞了？";
+    if (!locId) return "哪個儲位的貨壞了？請用下拉選，或直接點圖上有貨的格子";
     if (loc.data && loc.data.lines.length === 0) return "這個儲位沒有貨，請選別的儲位";
     if (!line) return "請選是哪一批";
     if (quantity <= 0) return `請填報損數量（單位：${line.product.unit}）`;
@@ -80,7 +80,7 @@ export default function Damage() {
       <StepBanner>{stepText}</StepBanner>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
       <Step n={1} title="哪個儲位的貨？" done={!!loc.data && loc.data.lines.length > 0}>
-        <LocationSelect value={locId} onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); setQuantity(0); }} />
+        <LocationPicker value={locId} mode="stocked" label="報損的儲位" onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); setQuantity(0); }} />
         {loc.data && loc.data.lines.length === 0 && <p className="mt-2 text-warn">這個儲位沒有貨。</p>}
       </Step>
       <Step n={2} title="哪一批、多少？" done={!!line && quantity > 0 && quantity <= line.quantity}>

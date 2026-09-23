@@ -135,7 +135,7 @@ export default function Transfer() {
       </div>
 
       {/* 目前步驟 ＋ 共用平面圖 */}
-      <StepBanner sticky={false}>{stepText[phase]}</StepBanner>
+      <StepBanner>{stepText[phase]}</StepBanner>
 
       {/* 批次與數量（起點選好後） */}
       {fromLoc && from.data && (

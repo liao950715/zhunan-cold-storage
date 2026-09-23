@@ -2,9 +2,9 @@ import { useAllLocations, type LocationOption } from "../api/hooks";
 import { locationWords } from "../lib/words";
 
 /** 儲位下拉：代碼＋白話（A 庫 1 號架 3 格）＋狀態文字；放了不同商品的儲位不可選（後端仍會驗證）。 */
-export default function LocationSelect({ value, onChange, productId, exclude = [], className = "" }: { value: number | null; onChange: (loc: LocationOption | null) => void; productId?: number | null; exclude?: number[]; className?: string }) {
+export default function LocationSelect({ value, onChange, productId, exclude = [], className = "", stockedOnly = false }: { value: number | null; onChange: (loc: LocationOption | null) => void; productId?: number | null; exclude?: number[]; className?: string; stockedOnly?: boolean }) {
   const all = useAllLocations();
-  const items = (all.data ?? []).filter((l) => !exclude.includes(l.id));
+  const items = (all.data ?? []).filter((l) => !exclude.includes(l.id) && (!stockedOnly || l.occupied));
   return (
     <select className={`input mt-0 ${className}`} value={value ?? ""} onChange={(e) => onChange(items.find((l) => l.id === Number(e.target.value)) ?? null)} aria-label="儲位">
       <option value="">— 請選擇儲位 —</option>
