@@ -5,6 +5,7 @@ import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock } from "../api/hooks";
 import type { LocationDetail } from "../api/types";
 import LocationSelect from "../components/LocationSelect";
+import LocationPicker from "../components/LocationPicker";
 import { Message, PageTitle, Step, fmtDate } from "../components/ui";
 import { locationLabel } from "../lib/words";
 
@@ -97,7 +98,7 @@ export default function Transfer() {
         )}
       </Step>
       <Step n={3} title="搬到哪裡？" done={!!toId}>
-        <LocationSelect value={toId} onChange={(l) => setToId(l?.id ?? null)} productId={productId} exclude={fromId ? [fromId] : []} />
+        <LocationPicker value={toId} onChange={(l) => setToId(l?.id ?? null)} productId={productId} exclude={fromId ? [fromId] : []} alsoHighlight={fromId ? [fromId] : []} label="搬到" />
         <p className="mt-1 muted">放了別的商品或已滿的儲位不能選；容量由系統再次檢查。</p>
       </Step>
       <Step n={4} title="確認搬移">

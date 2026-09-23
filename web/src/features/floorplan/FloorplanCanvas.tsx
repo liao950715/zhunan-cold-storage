@@ -11,12 +11,14 @@ export interface CanvasProps {
   selectedLocation: string | null;
   selectedRackKey: string | null;
   highlightCodes: Set<string>;
+  highlightLabel?: string;
+  compact?: boolean;
   onSelectLocation: (code: string | null) => void;
   onSelectRack: (key: string | null) => void;
   onRacksChange: (racks: DraftRack[]) => void;
 }
 
-const HANDLE_H = 22;
+const HANDLE_H = 28;
 
 /** 配色依 Design System；每格一律有文字（空儲位／商品｜數量／已滿），顏色只是輔助。 */
 const C = {
@@ -33,7 +35,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const fit = () => setScale(Math.max(0.2, Math.min(1, (el.clientWidth - 2) / p.layout.width)));
+    const fit = () => setScale(Math.max(0.2, Math.min(1.6, (el.clientWidth - 2) / p.layout.width)));
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
@@ -61,13 +63,13 @@ export default function FloorplanCanvas(p: CanvasProps) {
           {p.layout.layout.aisles?.map((a, i) => (
             <Group key={i} {...a}>
               <Rect width={a.width} height={a.height} fill={C.aisle} />
-              <Text text="通道" fontSize={16} fill={C.ink2} width={a.width} height={a.height} align="center" verticalAlign="middle" />
+              <Text text="通道" fontSize={22} fill={C.ink2} width={a.width} height={a.height} align="center" verticalAlign="middle" />
             </Group>
           ))}
           {p.layout.layout.entrance && (
             <Group {...p.layout.layout.entrance}>
               <Rect width={p.layout.layout.entrance.width} height={p.layout.layout.entrance.height} fill={C.entrance} />
-              <Text text="入口" fontSize={16} fill={C.ink} width={p.layout.layout.entrance.width} height={p.layout.layout.entrance.height} align="center" verticalAlign="middle" />
+              <Text text="入口" fontSize={22} fill={C.ink} width={p.layout.layout.entrance.width} height={p.layout.layout.entrance.height} align="center" verticalAlign="middle" />
             </Group>
           )}
         </Layer>
@@ -80,7 +82,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
                 <Rect width={rack.width} height={rack.height} fill={p.editing ? C.rackEdit : C.rack} stroke={rackSelected ? C.selected : C.rackStroke} strokeWidth={rackSelected ? 4 : 2} cornerRadius={6} />
                 {/* 標題列：編輯模式下作為整座貨架的拖曳把手 */}
                 <Rect y={-HANDLE_H} width={rack.width} height={HANDLE_H} fill={p.editing ? (rackSelected ? C.selected : "#7297ac") : "transparent"} cornerRadius={[6, 6, 0, 0]} />
-                <Text text={p.editing ? `⠿ ${rack.label ?? `貨架 ${rack.code}`}（拖曳這一列移動貨架）` : (rack.label ?? `貨架 ${rack.code}`)} x={6} y={-HANDLE_H + 4} fontSize={14} fill={p.editing ? "#ffffff" : C.ink} />
+                <Text text={p.editing ? `⠿ ${rack.label ?? `貨架 ${rack.code}`}（拖曳這一列移動貨架）` : (rack.label ?? `貨架 ${rack.code}`)} x={6} y={-HANDLE_H + 4} fontSize={20} fill={p.editing ? "#ffffff" : C.ink} />
                 {rack.locations.map((loc) => {
                   const selected = p.selectedLocation === loc.code;
                   const hl = p.highlightCodes.has(loc.code);
@@ -95,10 +97,10 @@ export default function FloorplanCanvas(p: CanvasProps) {
                       onDragEnd={(e) => { e.cancelBubble = true; moveLocation(rack.key, loc.code, e.target.x(), e.target.y()); }}
                       onClick={pick} onTap={pick}>
                       <Rect width={loc.width} height={loc.height} fill={fill} stroke={selected ? C.selected : hl ? C.highlightStroke : C.rackStroke} strokeWidth={selected || hl ? 4 : 1} cornerRadius={4} />
-                      <Text text={loc.code} x={6} y={5} fontSize={14} fontStyle="bold" fill={C.ink} />
-                      <Text text={hl ? "你找的位置" : status} x={6} y={loc.height - 20} fontSize={12} fill={hl ? C.warn : full ? C.warn : loc.occupied ? C.ok : C.ink2} />
+                      <Text text={loc.code} x={8} y={6} fontSize={p.compact ? 18 : 22} fontStyle="bold" fill={C.ink} />
+                      <Text text={hl ? (p.highlightLabel ?? "你找的位置") : status} x={8} y={loc.height - (p.compact ? 22 : 26)} fontSize={p.compact ? 15 : 18} fill={hl ? C.warn : full ? C.warn : loc.occupied ? C.ok : C.ink2} />
                       {loc.occupied && loc.product && (
-                        <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={6} y={loc.height / 2 - 8} fontSize={14} fontStyle="bold" fill={C.ink} width={loc.width - 12} ellipsis wrap="none" />
+                        <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={8} y={loc.height / 2 - (p.compact ? 8 : 12)} fontSize={p.compact ? 17 : 22} fontStyle="bold" fill={C.ink} width={loc.width - 16} ellipsis wrap="none" />
                       )}
                     </Group>
                   );

@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, post } from "../api/client";
 import { addDays, todayStr, useAllLocations, useInvalidateStock, useProducts } from "../api/hooks";
 import type { Product } from "../api/types";
-import LocationSelect from "../components/LocationSelect";
+import LocationPicker from "../components/LocationPicker";
 import ProductSelect from "../components/ProductSelect";
 import { Collapsible, Field, Message, PageTitle, Step, fmtDate } from "../components/ui";
 import { locationWords } from "../lib/words";
@@ -152,14 +152,22 @@ export default function Inbound() {
       <Step n={4} title="選擇放置位置" done={allocs.every((a) => a.locationId) && !mismatch}>
         <div className="space-y-3">
           {allocs.map((a, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-3">
-              <LocationSelect className="flex-1 min-w-[260px]" value={a.locationId} productId={product?.id} exclude={allocs.filter((_, j) => j !== i).map((x) => x.locationId!).filter(Boolean)} onChange={(loc) => setAllocs(allocs.map((x, j) => (j === i ? { ...x, locationId: loc?.id ?? null } : x)))} />
+            <div key={i} className={`space-y-2 ${split ? "rounded-[10px] border border-line p-3" : ""}`}>
+              {split && <p className="text-[18px] font-bold">第 {i + 1} 個儲位</p>}
+              <LocationPicker
+                value={a.locationId}
+                productId={product?.id}
+                exclude={allocs.filter((_, j) => j !== i).map((x) => x.locationId!).filter(Boolean)}
+                alsoHighlight={allocs.map((x) => x.locationId!).filter(Boolean)}
+                onChange={(loc) => setAllocs(allocs.map((x, j) => (j === i ? { ...x, locationId: loc?.id ?? null } : x)))}
+              />
               {split && (
-                <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[18px]">放多少：</span>
                   <input type="number" min={1} inputMode="numeric" className="input mt-0 w-32 text-[22px] font-bold" placeholder="數量" value={a.quantity || ""} onChange={(e) => setAllocs(allocs.map((x, j) => (j === i ? { ...x, quantity: Number(e.target.value) } : x)))} aria-label={`第 ${i + 1} 個儲位數量`} />
                   <span className="text-[20px]">{product?.unit}</span>
-                  <button type="button" className="btn-sm" disabled={allocs.length === 1} onClick={() => setAllocs(allocs.filter((_, j) => j !== i))}>移除</button>
-                </>
+                  <button type="button" className="btn-sm" disabled={allocs.length === 1} onClick={() => setAllocs(allocs.filter((_, j) => j !== i))}>移除這個儲位</button>
+                </div>
               )}
             </div>
           ))}

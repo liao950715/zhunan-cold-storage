@@ -85,7 +85,7 @@ export default function Shell() {
           <span>{user.displayName}</span>
           <button onClick={logout} className="btn-sm gap-2"><LogoutIcon size={18} />登出</button>
         </header>
-        <main className="mx-auto max-w-5xl px-4 py-5 lg:px-8 lg:py-8">
+        <main className={`mx-auto px-4 py-5 lg:px-8 lg:py-8 ${loc.pathname.startsWith("/floorplan") ? "max-w-[1400px]" : "max-w-5xl"}`}>
           <Outlet />
         </main>
       </div>

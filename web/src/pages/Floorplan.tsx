@@ -136,7 +136,7 @@ export default function Floorplan() {
       {message && <Message kind={message.kind}>{message.text}</Message>}
       {editing && overlapsList.length > 0 && <Message kind="warn">貨架 {overlapsList.map(([a, b]) => `${a}／${b}`).join("、")} 互相重疊（仍可儲存）</Message>}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="space-y-2">
           {layout.data ? (
             <FloorplanCanvas layout={layout.data} racks={racks} editing={editing} selectedLocation={selectedLocation} selectedRackKey={selectedRackKey} highlightCodes={highlightCodes} onSelectLocation={setSelectedLocation} onSelectRack={setSelectedRackKey} onRacksChange={setDraft} />
