@@ -24,8 +24,10 @@ const HANDLE_H = 28;
 const C = {
   floor: "#fafaf7", wall: "#9aa8a3", aisle: "#f0f2f1", entrance: "#eeddc7",
   rack: "#e4e9ec", rackEdit: "#e8f0f4", rackStroke: "#9aa8a3",
-  empty: "#ffffff", occupied: "#dce8e2", full: "#eeddc7", highlight: "#f6e3c9",
-  selected: "#5a8199", highlightStroke: "#c9843a", ink: "#303735", ink2: "#626b68", ok: "#2f5d46", warn: "#7a4b1e",
+  empty: "#ffffff", occupied: "#dce8e2", full: "#e9c4b8", fullText: "#8c3b32",
+  highlight: "#f2d48a", highlightStroke: "#b47a1f", highlightText: "#5c3d0a",
+  selected: "#5a8199", selectedStroke: "#35566b", selectedText: "#ffffff",
+  ink: "#303735", ink2: "#626b68", ok: "#2f5d46", warn: "#7a4b1e",
 };
 
 export default function FloorplanCanvas(p: CanvasProps) {
@@ -88,19 +90,22 @@ export default function FloorplanCanvas(p: CanvasProps) {
                   const hl = p.highlightCodes.has(loc.code);
                   const cap = loc.defaultCapacity;
                   const full = !!loc.occupied && cap !== null && cap !== undefined && (loc.quantity ?? 0) >= cap;
-                  const fill = hl ? C.highlight : full ? C.full : loc.occupied ? C.occupied : C.empty;
-                  const status = full ? "已滿" : loc.occupied ? "有貨" : "空儲位";
+                  // 已選 > 你找的位置 > 已滿 > 有貨 > 空：整格變色，文字跟著換
+                  const fill = selected ? C.selected : hl ? C.highlight : full ? C.full : loc.occupied ? C.occupied : C.empty;
+                  const textColor = selected ? C.selectedText : hl ? C.highlightText : C.ink;
+                  const status = selected ? "✓ 已選這裡" : hl ? (p.highlightLabel ?? "你找的位置") : full ? "已滿" : loc.occupied ? "有貨" : "空儲位";
+                  const statusColor = selected ? C.selectedText : hl ? C.highlightText : full ? C.fullText : loc.occupied ? C.ok : C.ink2;
                   const pick = (e: Konva.KonvaEventObject<Event>) => { e.cancelBubble = true; p.onSelectLocation(loc.code); p.onSelectRack(p.editing ? rack.key : null); };
                   return (
                     <Group key={loc.code} x={loc.x} y={loc.y} draggable={p.editing}
                       onDragStart={(e) => { e.cancelBubble = true; }}
                       onDragEnd={(e) => { e.cancelBubble = true; moveLocation(rack.key, loc.code, e.target.x(), e.target.y()); }}
                       onClick={pick} onTap={pick}>
-                      <Rect width={loc.width} height={loc.height} fill={fill} stroke={selected ? C.selected : hl ? C.highlightStroke : C.rackStroke} strokeWidth={selected || hl ? 4 : 1} cornerRadius={4} />
-                      <Text text={loc.code} x={8} y={6} fontSize={p.compact ? 18 : 22} fontStyle="bold" fill={C.ink} />
-                      <Text text={hl ? (p.highlightLabel ?? "你找的位置") : status} x={8} y={loc.height - (p.compact ? 22 : 26)} fontSize={p.compact ? 15 : 18} fill={hl ? C.warn : full ? C.warn : loc.occupied ? C.ok : C.ink2} />
+                      <Rect width={loc.width} height={loc.height} fill={fill} stroke={selected ? C.selectedStroke : hl ? C.highlightStroke : C.rackStroke} strokeWidth={selected || hl ? 5 : 1} cornerRadius={4} />
+                      <Text text={loc.code} x={8} y={6} fontSize={p.compact ? 18 : 22} fontStyle="bold" fill={textColor} />
+                      <Text text={status} x={8} y={loc.height - (p.compact ? 22 : 26)} fontSize={p.compact ? 15 : 18} fontStyle={selected || hl ? "bold" : "normal"} fill={statusColor} />
                       {loc.occupied && loc.product && (
-                        <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={8} y={loc.height / 2 - (p.compact ? 8 : 12)} fontSize={p.compact ? 17 : 22} fontStyle="bold" fill={C.ink} width={loc.width - 16} ellipsis wrap="none" />
+                        <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={8} y={loc.height / 2 - (p.compact ? 8 : 12)} fontSize={p.compact ? 17 : 22} fontStyle="bold" fill={textColor} width={loc.width - 16} ellipsis wrap="none" />
                       )}
                     </Group>
                   );

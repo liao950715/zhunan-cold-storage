@@ -146,8 +146,9 @@ export default function Floorplan() {
           <div className="flex flex-wrap gap-4 text-[16px] text-ink-2" aria-label="圖例">
             <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-white align-middle" />空儲位</span>
             <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-ok-soft align-middle" />有貨（寫商品與數量）</span>
-            <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-warn-soft align-middle" />已滿</span>
-            {highlightCodes.size > 0 && <span><i className="mr-1 inline-block h-4 w-6 rounded border-2 border-[#c9843a] bg-[#f6e3c9] align-middle" />你找的位置</span>}
+            <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-[#e9c4b8] align-middle" />已滿</span>
+            <span><i className="mr-1 inline-block h-4 w-6 rounded border-2 border-[#35566b] bg-[#5a8199] align-middle" />點選中</span>
+            {highlightCodes.size > 0 && <span><i className="mr-1 inline-block h-4 w-6 rounded border-2 border-[#b47a1f] bg-[#f2d48a] align-middle" />你找的位置</span>}
           </div>
         </div>
         <aside className="panel min-h-40">
