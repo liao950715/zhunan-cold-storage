@@ -8,17 +8,17 @@
   font-display: swap;
 }
 
-/* Design System（docs/UI_DESIGN.md §2）：暖白底、深色字、柔和藍操作；狀態一律顏色＋文字 */
+/* Design System：淺灰白底、深色字、深藍主要操作；狀態一律顏色＋文字 */
 @theme {
-  --color-bg: #fafaf7;
-  --color-bg-2: #f0f2f1;
-  --color-ink: #303735;
-  --color-ink-2: #626b68;
-  --color-line: #dde2e0;
-  --color-brand: #7297ac;        /* 選中底、外框、圖示、連結 */
-  --color-brand-dark: #5a8199;   /* 主要按鈕（白字對比 4.6:1） */
-  --color-brand-deep: #4a6c82;
-  --color-brand-soft: #e8f0f4;
+  --color-bg: #f5f6f8;
+  --color-bg-2: #eceef1;
+  --color-ink: #20252b;
+  --color-ink-2: #525c69;
+  --color-line: #d9dee5;
+  --color-brand: #175cd3;        /* 主要操作、選中色條、連結 */
+  --color-brand-dark: #175cd3;   /* 主要按鈕（白字對比 6.3:1） */
+  --color-brand-deep: #124aa8;
+  --color-brand-soft: #e8effc;
   --color-ok: #2f5d46;
   --color-ok-soft: #dce8e2;
   --color-warn: #7a4b1e;

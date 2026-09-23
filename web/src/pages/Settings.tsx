@@ -43,7 +43,7 @@ export default function Settings() {
       {msg && <Message kind={msg.kind}>{msg.text}</Message>}
       <div className="grid gap-3 lg:grid-cols-[1fr_320px]">
         <Card title="使用者">
-          <table className="w-full text-[16px]">
+          <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[16px]">
             <thead className="text-left text-ink-2"><tr><th className="py-1">帳號</th><th>名稱</th><th>角色</th><th>狀態</th><th></th></tr></thead>
             <tbody>
               {users.data?.items.map((u) => (
@@ -63,7 +63,7 @@ export default function Settings() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
         <Card title="新增帳號">
           <form onSubmit={submit} className="space-y-2">

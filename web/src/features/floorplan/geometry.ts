@@ -26,7 +26,7 @@ export function toDraft(layout: WarehouseLayout): DraftRack[] {
     y: r.y,
     width: r.width,
     height: r.height,
-    locations: r.locations.map((l) => ({ id: l.id, code: l.code, x: l.x, y: l.y, width: l.width, height: l.height, defaultCapacity: l.defaultCapacity, occupied: l.occupied, quantity: l.quantity, product: l.product })),
+    locations: r.locations.map((l) => ({ id: l.id, code: l.code, x: l.x, y: l.y, width: l.width, height: l.height, defaultCapacity: l.defaultCapacity, capacity: l.capacity, occupied: l.occupied, quantity: l.quantity, product: l.product })),
   }));
 }
 
@@ -35,7 +35,7 @@ export function toPayload(version: number, racks: DraftRack[]) {
     version,
     racks: racks.map(({ key: _k, locations, ...r }) => ({
       ...r,
-      locations: locations.map(({ occupied: _o, quantity: _q, product: _p, ...l }) => l),
+      locations: locations.map(({ occupied: _o, quantity: _q, product: _p, capacity: _c, ...l }) => l),
     })),
   };
 }

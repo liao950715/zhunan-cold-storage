@@ -27,6 +27,8 @@ export interface LayoutLocation {
   width: number;
   height: number;
   defaultCapacity: number | null;
+  /** 對目前存放商品的有效容量（商品專屬容量 > 預設）；null＝未設定，不可推測已滿 */
+  capacity: number | null;
   occupied: boolean;
   quantity: number;
   batchCount: number;
@@ -101,6 +103,7 @@ export interface DraftLocation {
   height: number;
   defaultCapacity: number | null;
   // 僅前端顯示用
+  capacity?: number | null;
   occupied?: boolean;
   quantity?: number;
   product?: LayoutLocation["product"];

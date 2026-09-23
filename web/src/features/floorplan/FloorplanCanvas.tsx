@@ -10,6 +10,7 @@ export interface CanvasProps {
   editing: boolean;
   selectedLocation: string | null;
   selectedRackKey: string | null;
+  /** 搜尋結果（只在從查詢定位或平面圖搜尋時有值） */
   highlightCodes: Set<string>;
   highlightLabel?: string;
   compact?: boolean;
@@ -20,15 +21,24 @@ export interface CanvasProps {
 
 const HANDLE_H = 28;
 
-/** 配色依 Design System；每格一律有文字（空儲位／商品｜數量／已滿），顏色只是輔助。 */
-const C = {
-  floor: "#fafaf7", wall: "#9aa8a3", aisle: "#f0f2f1", entrance: "#eeddc7",
-  rack: "#e4e9ec", rackEdit: "#e8f0f4", rackStroke: "#9aa8a3",
-  empty: "#ffffff", occupied: "#dce8e2", full: "#e9c4b8", fullText: "#8c3b32",
-  highlight: "#f2d48a", highlightStroke: "#b47a1f", highlightText: "#5c3d0a",
-  selected: "#5a8199", selectedStroke: "#35566b", selectedText: "#ffffff",
-  ink: "#303735", ink2: "#626b68", ok: "#2f5d46", warn: "#7a4b1e",
+/**
+ * 儲位配色（依需求指定）：點選中 > 搜尋結果 > 庫存狀態；每格永遠有「已滿／有貨／空位」文字。
+ * 「已滿」只在有效容量已知時判斷；未設定容量不推測。
+ */
+export const CELL_COLORS = {
+  selected: { fill: "#5a8199", stroke: "#29485c", text: "#ffffff", label: "✓ 已選這裡" },
+  search: { fill: "#ffe066", stroke: "#111111", text: "#111111", label: "搜尋結果" },
+  full: { fill: "#a4262c", stroke: "#7a1c21", text: "#ffffff", label: "已滿" },
+  occupied: { fill: "#d9eaf7", stroke: "#4a7fb5", text: "#20252b", label: "有貨" },
+  empty: { fill: "#ffffff", stroke: "#9aa3ad", text: "#20252b", label: "空位" },
 };
+const C = { floor: "#f5f6f8", wall: "#9aa3ad", aisle: "#eceef1", entrance: "#e8effc", rack: "#e6e9ee", rackEdit: "#e8effc", rackStroke: "#9aa3ad", ink: "#20252b", ink2: "#525c69" };
+
+export function cellState(loc: { occupied?: boolean; quantity?: number; capacity?: number | null }) {
+  const cap = loc.capacity ?? null;
+  const full = !!loc.occupied && cap !== null && (loc.quantity ?? 0) >= cap;
+  return full ? "full" : loc.occupied ? "occupied" : "empty";
+}
 
 export default function FloorplanCanvas(p: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +56,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
 
   const W = p.layout.width;
   const H = p.layout.height;
+  const fs = (n: number) => (p.compact ? Math.round(n * 0.82) : n);
 
   function moveRack(key: string, x: number, y: number) {
     p.onRacksChange(p.racks.map((r) => (r.key === key ? { ...r, ...clampRect({ x, y, width: r.width, height: r.height }, W, H) } : r)));
@@ -70,7 +81,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
           ))}
           {p.layout.layout.entrance && (
             <Group {...p.layout.layout.entrance}>
-              <Rect width={p.layout.layout.entrance.width} height={p.layout.layout.entrance.height} fill={C.entrance} />
+              <Rect width={p.layout.layout.entrance.width} height={p.layout.layout.entrance.height} fill={C.entrance} stroke={C.wall} strokeWidth={1} />
               <Text text="入口" fontSize={22} fill={C.ink} width={p.layout.layout.entrance.width} height={p.layout.layout.entrance.height} align="center" verticalAlign="middle" />
             </Group>
           )}
@@ -81,31 +92,33 @@ export default function FloorplanCanvas(p: CanvasProps) {
             const select = (e: Konva.KonvaEventObject<Event>) => { if (p.editing) { e.cancelBubble = true; p.onSelectRack(rack.key); p.onSelectLocation(null); } };
             return (
               <Group key={rack.key} x={rack.x} y={rack.y} draggable={p.editing} onDragEnd={(e) => moveRack(rack.key, e.target.x(), e.target.y())} onClick={select} onTap={select}>
-                <Rect width={rack.width} height={rack.height} fill={p.editing ? C.rackEdit : C.rack} stroke={rackSelected ? C.selected : C.rackStroke} strokeWidth={rackSelected ? 4 : 2} cornerRadius={6} />
-                {/* 標題列：編輯模式下作為整座貨架的拖曳把手 */}
-                <Rect y={-HANDLE_H} width={rack.width} height={HANDLE_H} fill={p.editing ? (rackSelected ? C.selected : "#7297ac") : "transparent"} cornerRadius={[6, 6, 0, 0]} />
+                <Rect width={rack.width} height={rack.height} fill={p.editing ? C.rackEdit : C.rack} stroke={rackSelected ? CELL_COLORS.selected.stroke : C.rackStroke} strokeWidth={rackSelected ? 4 : 2} cornerRadius={6} />
+                <Rect y={-HANDLE_H} width={rack.width} height={HANDLE_H} fill={p.editing ? (rackSelected ? CELL_COLORS.selected.fill : "#175cd3") : "transparent"} cornerRadius={[6, 6, 0, 0]} />
                 <Text text={p.editing ? `⠿ ${rack.label ?? `貨架 ${rack.code}`}（拖曳這一列移動貨架）` : (rack.label ?? `貨架 ${rack.code}`)} x={6} y={-HANDLE_H + 4} fontSize={20} fill={p.editing ? "#ffffff" : C.ink} />
                 {rack.locations.map((loc) => {
                   const selected = p.selectedLocation === loc.code;
-                  const hl = p.highlightCodes.has(loc.code);
-                  const cap = loc.defaultCapacity;
-                  const full = !!loc.occupied && cap !== null && cap !== undefined && (loc.quantity ?? 0) >= cap;
-                  // 已選 > 你找的位置 > 已滿 > 有貨 > 空：整格變色，文字跟著換
-                  const fill = selected ? C.selected : hl ? C.highlight : full ? C.full : loc.occupied ? C.occupied : C.empty;
-                  const textColor = selected ? C.selectedText : hl ? C.highlightText : C.ink;
-                  const status = selected ? "✓ 已選這裡" : hl ? (p.highlightLabel ?? "你找的位置") : full ? "已滿" : loc.occupied ? "有貨" : "空儲位";
-                  const statusColor = selected ? C.selectedText : hl ? C.highlightText : full ? C.fullText : loc.occupied ? C.ok : C.ink2;
+                  const hl = !selected && p.highlightCodes.has(loc.code);
+                  const base = CELL_COLORS[cellState(loc)];
+                  const skin = selected ? CELL_COLORS.selected : hl ? CELL_COLORS.search : base;
+                  const badge = selected ? CELL_COLORS.selected.label : hl ? (p.highlightLabel ?? CELL_COLORS.search.label) : null;
                   const pick = (e: Konva.KonvaEventObject<Event>) => { e.cancelBubble = true; p.onSelectLocation(loc.code); p.onSelectRack(p.editing ? rack.key : null); };
+                  const statusSize = fs(19);
                   return (
                     <Group key={loc.code} x={loc.x} y={loc.y} draggable={p.editing}
                       onDragStart={(e) => { e.cancelBubble = true; }}
                       onDragEnd={(e) => { e.cancelBubble = true; moveLocation(rack.key, loc.code, e.target.x(), e.target.y()); }}
                       onClick={pick} onTap={pick}>
-                      <Rect width={loc.width} height={loc.height} fill={fill} stroke={selected ? C.selectedStroke : hl ? C.highlightStroke : C.rackStroke} strokeWidth={selected || hl ? 5 : 1} cornerRadius={4} />
-                      <Text text={loc.code} x={8} y={6} fontSize={p.compact ? 18 : 22} fontStyle="bold" fill={textColor} />
-                      <Text text={status} x={8} y={loc.height - (p.compact ? 22 : 26)} fontSize={p.compact ? 15 : 18} fontStyle={selected || hl ? "bold" : "normal"} fill={statusColor} />
+                      <Rect width={loc.width} height={loc.height} fill={skin.fill} stroke={skin.stroke} strokeWidth={selected || hl ? 5 : 2} cornerRadius={4} />
+                      {/* 1 儲位編號 */}
+                      <Text text={loc.code} x={8} y={6} fontSize={fs(22)} fontStyle="bold" fill={skin.text} />
+                      {/* 2 商品與數量 */}
                       {loc.occupied && loc.product && (
-                        <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={8} y={loc.height / 2 - (p.compact ? 8 : 12)} fontSize={p.compact ? 17 : 22} fontStyle="bold" fill={textColor} width={loc.width - 16} ellipsis wrap="none" />
+                        <Text text={`${loc.product.name}｜${loc.quantity} ${loc.product.unit}`} x={8} y={loc.height / 2 - fs(12)} fontSize={fs(22)} fontStyle="bold" fill={skin.text} width={loc.width - 16} ellipsis wrap="none" />
+                      )}
+                      {/* 3 庫存狀態（永遠顯示）＋ 右下角「已選／搜尋結果」 */}
+                      <Text text={base.label} x={8} y={loc.height - statusSize - 8} fontSize={statusSize} fontStyle="bold" fill={skin.text} />
+                      {badge && (
+                        <Text text={badge} x={8} y={loc.height - statusSize - 8} width={loc.width - 16} align="right" fontSize={statusSize} fontStyle="bold" fill={skin.text} />
                       )}
                     </Group>
                   );

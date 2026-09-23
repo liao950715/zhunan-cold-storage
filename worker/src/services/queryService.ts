@@ -120,11 +120,13 @@ export function getLayout(db: Db, id: number) {
   const w = db.one<{ id: number; code: string; name: string; width: number; height: number; layoutJson: string; layoutVersion: number }>("SELECT * FROM Warehouse WHERE id = ?", id);
   if (!w) throw notFound("冷凍庫");
   const racks = db.all<{ id: number; warehouseId: number; code: string; label: string | null; x: number; y: number; width: number; height: number; rotation: number; status: string }>("SELECT * FROM Rack WHERE warehouseId = ? AND status = 'ACTIVE' ORDER BY code", id);
-  const locs = db.all<{ id: number; rackId: number; code: string; x: number; y: number; width: number; height: number; defaultCapacity: number | null; status: string; quantity: number; batchCount: number; productId: number | null; productName: string | null; unit: string | null }>(
-    `SELECT l.*, COALESCE(s.quantity, 0) AS quantity, COALESCE(s.batchCount, 0) AS batchCount, s.productId, p.name AS productName, p.unit
+  const locs = db.all<{ id: number; rackId: number; code: string; x: number; y: number; width: number; height: number; defaultCapacity: number | null; capacity: number | null; status: string; quantity: number; batchCount: number; productId: number | null; productName: string | null; unit: string | null }>(
+    `SELECT l.*, COALESCE(s.quantity, 0) AS quantity, COALESCE(s.batchCount, 0) AS batchCount, s.productId, p.name AS productName, p.unit,
+       COALESCE(lc.capacity, l.defaultCapacity) AS capacity
      FROM Location l JOIN Rack r ON r.id = l.rackId
      LEFT JOIN (SELECT i.locationId, SUM(i.quantity) AS quantity, COUNT(*) AS batchCount, MIN(b.productId) AS productId FROM Inventory i JOIN Batch b ON b.id = i.batchId WHERE i.quantity > 0 GROUP BY i.locationId) s ON s.locationId = l.id
      LEFT JOIN Product p ON p.id = s.productId
+     LEFT JOIN LocationCapacity lc ON lc.locationId = l.id AND lc.productId = s.productId
      WHERE r.warehouseId = ? AND l.status = 'ACTIVE' ORDER BY l.code`, id);
   const { layoutJson, ...rest } = w;
   return {

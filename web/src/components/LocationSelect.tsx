@@ -10,8 +10,8 @@ export default function LocationSelect({ value, onChange, productId, exclude = [
       <option value="">— 請選擇儲位 —</option>
       {items.map((l) => {
         const conflict = !!productId && l.occupied && l.product?.id !== productId;
-        const full = l.occupied && l.defaultCapacity !== null && l.quantity >= l.defaultCapacity;
-        const state = l.occupied ? `有 ${l.product?.name} ${l.quantity} ${l.product?.unit}${full ? "，已滿" : ""}` : `空${l.defaultCapacity ? `，可放 ${l.defaultCapacity}` : ""}`;
+        const full = l.occupied && l.capacity !== null && l.quantity >= l.capacity;
+        const state = l.occupied ? `有 ${l.product?.name} ${l.quantity} ${l.product?.unit}${full ? "，已滿" : ""}` : `空位${l.defaultCapacity ? `，可放 ${l.defaultCapacity}` : ""}`;
         return (
           <option key={l.id} value={l.id} disabled={conflict || (!!productId && full)}>
             {l.code}（{locationWords(l.code)}）　{state}{conflict ? "　✕ 放了別的商品" : ""}

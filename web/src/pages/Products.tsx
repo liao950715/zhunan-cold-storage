@@ -34,7 +34,7 @@ export default function Products() {
       {creating && <CreateProductInline onCancel={() => setCreating(false)} onCreated={(p) => { setCreating(false); setMsg({ kind: "ok", text: `已新增商品「${p.name}」` }); }} />}
       {editing && <EditProduct product={editing} onDone={(text) => { setEditing(null); if (text) setMsg({ kind: "ok", text }); }} />}
       <Card>
-        <table className="w-full text-[16px]">
+        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[16px]">
           <thead className="text-left text-ink-2">
             <tr><th className="py-1">名稱</th><th>類別</th><th>單位</th><th className="text-right">低庫存警戒</th><th className="text-right">效期提醒</th><th>狀態</th><th></th></tr>
           </thead>
@@ -55,7 +55,7 @@ export default function Products() {
             ))}
             {items.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-ink-2">沒有符合的商品</td></tr>}
           </tbody>
-        </table>
+        </table></div>
       </Card>
     </div>
   );

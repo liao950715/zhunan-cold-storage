@@ -28,7 +28,7 @@ describe("floorplan geometry", () => {
 
   it("toPayload 去除前端顯示欄位", () => {
     const r = rack("01", 0, 0);
-    r.locations.push({ id: 9, code: "A-01-01", x: 0, y: 0, width: 10, height: 10, defaultCapacity: 20, occupied: true, quantity: 5, product: { id: 1, name: "x", unit: "籠" } });
+    r.locations.push({ id: 9, code: "A-01-01", x: 0, y: 0, width: 10, height: 10, defaultCapacity: 20, capacity: 20, occupied: true, quantity: 5, product: { id: 1, name: "x", unit: "籠" } });
     const p = toPayload(3, [r]);
     expect(p.version).toBe(3);
     expect(p.racks[0]).not.toHaveProperty("key");

@@ -39,7 +39,7 @@ export default function Stocktake() {
       {tab === "new" && <NewStocktake onDone={async (id) => { await invalidate(); setTab("list"); setMsg({ kind: "ok", text: `盤點單 #${id} 已提交，等待管理員核准；正式庫存尚未變動` }); }} />}
       {tab === "list" && (
         <Card>
-          <table className="w-full text-[16px]">
+          <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[16px]">
             <thead className="text-left text-ink-2"><tr><th className="py-1">#</th><th>狀態</th><th>範圍</th><th>提交</th><th className="text-right">明細</th><th className="text-right">差異筆數</th><th>審核</th><th></th></tr></thead>
             <tbody>
               {list.data?.items.map((s) => (
@@ -65,7 +65,7 @@ export default function Stocktake() {
                   {open === s.id && (
                     <tr>
                       <td colSpan={8} className="bg-bg-2 p-3">
-                        <table className="w-full text-[16px]">
+                        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[16px]">
                           <thead className="text-ink-2"><tr><th className="text-left">儲位</th><th className="text-left">商品</th><th className="text-left">批次</th><th className="text-right">系統基準</th><th className="text-right">實盤</th><th className="text-right">差異</th></tr></thead>
                           <tbody>
                             {s.items.map((i) => (
@@ -75,7 +75,7 @@ export default function Stocktake() {
                               </tr>
                             ))}
                           </tbody>
-                        </table>
+                        </table></div>
                         {s.note && <p className="mt-1 text-slate-600">備註：{s.note}</p>}
                       </td>
                     </tr>
@@ -84,7 +84,7 @@ export default function Stocktake() {
               ))}
               {list.data?.items.length === 0 && <tr><td colSpan={8} className="py-3 text-center text-ink-2">尚無盤點單</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </Card>
       )}
     </div>

@@ -40,7 +40,7 @@ export default function LocationPicker({ value, onChange, productId, exclude = [
     if (!loc) return;
     if (exclude.includes(loc.id)) { setHint(`${loc.code} 已經在這筆操作裡選過了。`); return; }
     if (productId && loc.occupied && loc.product?.id !== productId) { setHint(`${loc.code} 放了「${loc.product?.name}」，不能放不同的商品。請選空的或放同一商品的儲位。`); return; }
-    if (productId && loc.occupied && loc.defaultCapacity !== null && loc.quantity >= loc.defaultCapacity) { setHint(`${loc.code} 已滿（${loc.quantity}/${loc.defaultCapacity}）。`); return; }
+    if (productId && loc.occupied && loc.capacity !== null && loc.quantity >= loc.capacity) { setHint(`${loc.code} 已滿（${loc.quantity}/${loc.capacity}）。`); return; }
     onChange(loc);
   }
 

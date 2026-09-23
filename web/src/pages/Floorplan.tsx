@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { del, errorMessage, get, put } from "../api/client";
 import type { DraftRack, WarehouseLayout, WarehouseSummary } from "../api/types";
-import FloorplanCanvas from "../features/floorplan/FloorplanCanvas";
+import FloorplanCanvas, { CELL_COLORS } from "../features/floorplan/FloorplanCanvas";
+import LocationSelect from "../components/LocationSelect";
 import LocationPanel from "../features/floorplan/LocationPanel";
 import { useDialog } from "../components/ConfirmDialog";
 import { Field, Message, PageTitle } from "../components/ui";
@@ -100,7 +101,7 @@ export default function Floorplan() {
 
   return (
     <div className="space-y-4">
-      <PageTitle sub={editing ? "配置編輯模式" : "點一下儲位，就能看到裡面放什麼"}>平面圖</PageTitle>
+      <PageTitle sub={editing ? "配置編輯模式" : "點一下儲位，就能看到裡面放什麼"}>冷凍庫平面圖</PageTitle>
 
       {editing && (
         <div className="flex flex-wrap items-center gap-3 rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[18px]">
@@ -118,6 +119,9 @@ export default function Floorplan() {
           ))}
         </div>
         <span className="muted">{wh.rackCount} 座貨架 · {wh.locationCount} 個儲位</span>
+        {highlightCodes.size > 0 && !editing && (
+          <button className="btn-sm" onClick={() => setParams({ warehouse: wh.code })}>清除搜尋標示（{highlightCodes.size} 個）</button>
+        )}
         <div className="ml-auto flex flex-wrap gap-2">
           {!editing ? (
             <button className="btn-sm" onClick={startEdit}>調整貨架配置（管理用）</button>
@@ -143,12 +147,11 @@ export default function Floorplan() {
           ) : (
             <p className="text-ink-2">載入平面圖…</p>
           )}
-          <div className="flex flex-wrap gap-4 text-[16px] text-ink-2" aria-label="圖例">
-            <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-white align-middle" />空儲位</span>
-            <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-ok-soft align-middle" />有貨（寫商品與數量）</span>
-            <span><i className="mr-1 inline-block h-4 w-6 rounded border border-line bg-[#e9c4b8] align-middle" />已滿</span>
-            <span><i className="mr-1 inline-block h-4 w-6 rounded border-2 border-[#35566b] bg-[#5a8199] align-middle" />點選中</span>
-            {highlightCodes.size > 0 && <span><i className="mr-1 inline-block h-4 w-6 rounded border-2 border-[#b47a1f] bg-[#f2d48a] align-middle" />你找的位置</span>}
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-[16px] text-ink" aria-label="圖例">
+            {([["empty", "空位"], ["occupied", "有貨"], ["full", "已滿（依設定的容量）"], ["selected", "點選中"]] as const).map(([k, label]) => (
+              <span key={k} className="flex items-center gap-2"><i className="inline-block h-5 w-8 rounded border-2" style={{ background: CELL_COLORS[k].fill, borderColor: CELL_COLORS[k].stroke }} />{label}</span>
+            ))}
+            {highlightCodes.size > 0 && <span className="flex items-center gap-2"><i className="inline-block h-5 w-8 rounded border-2" style={{ background: CELL_COLORS.search.fill, borderColor: CELL_COLORS.search.stroke }} />搜尋結果</span>}
           </div>
         </div>
         <aside className="panel min-h-40">
@@ -160,7 +163,15 @@ export default function Floorplan() {
               if (action === "transfer") navigate(`/transfer?locationId=${d.location.id}${first ? `&batchId=${first.batch.id}` : ""}`);
             }} />
           )}
-          {!editing && !selectedLoc && <p className="text-[18px] text-ink-2">點一下儲位，就能看到裡面放什麼，並可直接入庫、出庫或搬移。{highlightCodes.size > 0 && <><br />橘色標記的是你找的位置：{[...highlightCodes].join("、")}。</>}</p>}
+          {!editing && !selectedLoc && (
+            <div className="space-y-3">
+              <p className="text-[18px] text-ink-2">點一下儲位，就能看到裡面放什麼，並可直接入庫、出庫或搬移。</p>
+              {highlightCodes.size > 0 && <p className="text-[18px]"><span className="rounded px-2 py-0.5 font-bold" style={{ background: CELL_COLORS.search.fill }}>搜尋結果</span> {[...highlightCodes].join("、")}</p>}
+              <label className="block"><span className="label">或用鍵盤選儲位</span>
+                <LocationSelect value={null} onChange={(l) => { if (l) { if (l.warehouseCode !== wh.code) setParams({ warehouse: l.warehouseCode, ...(params.get("highlight") ? { highlight: params.get("highlight")! } : {}) }); setSelectedLocation(l.code); } }} />
+              </label>
+            </div>
+          )}
           {editing && selectedRack && !selectedLocation && (
             <div className="space-y-3">
               <h3 className="text-[22px] font-bold">貨架 {selectedRack.code}</h3>

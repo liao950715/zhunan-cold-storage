@@ -58,8 +58,9 @@ export default function Inbound() {
 
   const capacityWarnings = allocs.flatMap((a) => {
     const loc = locName(a.locationId);
-    if (!loc || loc.defaultCapacity === null) return [];
-    return loc.quantity + a.quantity > loc.defaultCapacity ? [`${loc.code} 容量 ${loc.defaultCapacity}，目前已放 ${loc.quantity}，再放 ${a.quantity} 會超過。請減少數量或改放其他儲位。`] : [];
+    const cap = loc?.occupied ? loc.capacity : loc?.defaultCapacity;
+    if (!loc || cap === null || cap === undefined) return [];
+    return loc.quantity + a.quantity > cap ? [`${loc.code} 最多還能放 ${Math.max(0, cap - loc.quantity)} ${product?.unit ?? ""}（容量 ${cap}，目前已放 ${loc.quantity}），再放 ${a.quantity} 會超過。請減少數量或改放其他儲位。`] : [];
   });
 
   const m = useMutation({

@@ -35,7 +35,10 @@ export default function Inventory() {
         <button className="btn-primary" type="submit"><SearchIcon size={22} />找貨</button>
       </form>
       {!q && (
-        <p className="muted">或 <Link className="text-brand underline" to="/floorplan">直接看平面圖</Link>，點儲位查看內容。</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link className="btn" to="/floorplan">看冷凍庫平面圖</Link>
+          <span className="muted">在圖上點儲位，就能看到裡面放什麼。</span>
+        </div>
       )}
 
       {q && result.data && groups.size === 0 && (
