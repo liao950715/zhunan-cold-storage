@@ -59,8 +59,13 @@ export function Step({ n, title, children, done }: { n: number; title: ReactNode
 }
 
 /** 「目前步驟」提示列：一句話說現在要做什麼；放在頁面標題正下方。 */
-export function StepBanner({ children }: { children: ReactNode }) {
-  return <div role="status" aria-live="polite" className="rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[20px] font-bold">目前步驟：{children}</div>;
+export function StepBanner({ children, sticky = true }: { children: ReactNode; sticky?: boolean }) {
+  // sticky：往下捲時提示列釘在畫面上方，跟著題目走，不用往上翻
+  return (
+    <div role="status" aria-live="polite" className={`rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[20px] font-bold ${sticky ? "sticky top-2 z-30 shadow-[0_2px_8px_rgba(0,0,0,.08)]" : ""}`}>
+      目前步驟：{children}
+    </div>
+  );
 }
 
 export function Collapsible({ label, children, defaultOpen = false }: { label: string; children: ReactNode; defaultOpen?: boolean }) {
