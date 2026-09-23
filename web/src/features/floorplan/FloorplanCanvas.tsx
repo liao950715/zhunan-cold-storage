@@ -102,7 +102,8 @@ export default function FloorplanCanvas(p: CanvasProps) {
                   const skin = selected ? CELL_COLORS.selected : hl ? CELL_COLORS.search : base;
                   const badge = selected ? CELL_COLORS.selected.label : hl ? (p.highlightLabel ?? CELL_COLORS.search.label) : null;
                   const pick = (e: Konva.KonvaEventObject<Event>) => { e.cancelBubble = true; p.onSelectLocation(loc.code); p.onSelectRack(p.editing ? rack.key : null); };
-                  const statusSize = fs(19);
+                  // 有右下角標記時兩段文字共用一列：縮到 16px 避免重疊（白字對比仍 ≥ 4.5:1）
+                  const statusSize = badge ? fs(16) : fs(19);
                   return (
                     <Group key={loc.code} x={loc.x} y={loc.y} draggable={p.editing}
                       onDragStart={(e) => { e.cancelBubble = true; }}
