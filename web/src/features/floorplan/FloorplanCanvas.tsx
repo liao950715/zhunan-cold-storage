@@ -34,7 +34,7 @@ export const CELL_COLORS = {
   occupied: { fill: "#1f6b3a", stroke: "#14502a", text: "#ffffff", label: "有貨" },
   empty: { fill: "#ffffff", stroke: "#9aa3ad", text: "#20252b", label: "空位" },
   from: { fill: "#5a8199", stroke: "#29485c", text: "#ffffff", label: "① 從這裡搬出" },
-  to: { fill: "#6b5b95", stroke: "#463a66", text: "#ffffff", label: "② 搬到這裡" },
+  to: { fill: "#ffb454", stroke: "#754000", text: "#2b2118", label: "② 搬到這裡" },
 };
 const C = { floor: "#f5f6f8", wall: "#9aa3ad", aisle: "#eceef1", entrance: "#e8effc", rack: "#e6e9ee", rackEdit: "#e8effc", rackStroke: "#9aa3ad", ink: "#20252b", ink2: "#525c69" };
 

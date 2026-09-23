@@ -120,13 +120,13 @@ export default function Transfer() {
             <p className="text-[20px] text-ink-2">尚未選擇</p>
           )}
         </div>
-        <div className={`rounded-[14px] p-4 ${toLoc ? "bg-[#6b5b95] text-white" : "border-2 border-dashed border-line bg-white"}`}>
+        <div className={`rounded-[14px] p-4 ${toLoc ? "border-4 border-[#754000] bg-[#ffb454] text-[#2b2118]" : "border-2 border-dashed border-line bg-white"}`}>
           <p className="text-[18px] font-bold">② 搬到這裡</p>
           {toLoc ? (
             <>
               <p className="text-[26px] font-bold">{toLoc.code}</p>
               <p className="text-[18px]">{locationWords(toLoc.code)}・{toLoc.occupied ? `有 ${toLoc.product?.name} ${toLoc.quantity} ${toLoc.product?.unit}` : "空位"}</p>
-              <button type="button" className="btn-sm mt-2 text-ink" onClick={changeTo}>更換搬到位置</button>
+              <button type="button" className="btn-sm mt-2 border-[#754000] text-ink" onClick={changeTo}>更換搬到位置</button>
             </>
           ) : (
             <p className="text-[20px] text-ink-2">{phase === "from" || phase === "batch" ? "請先完成搬出位置" : "尚未選擇"}</p>
@@ -153,7 +153,20 @@ export default function Transfer() {
             </div>
           )}
           {line && (
-            <div className="flex flex-wrap items-center gap-3">
+            {/* 最後確認 */}
+      {phase === "confirm" && fromLoc && toLoc && line && (
+        <div className="panel space-y-3 border-l-8 border-brand">
+          <p className="text-[26px] font-bold">{line.product.name} {quantity} {line.product.unit}，從 {fromLoc.code} → {toLoc.code}</p>
+          <p className="muted">批次 {line.batch.batchNo}・{locationWords(fromLoc.code)} → {locationWords(toLoc.code)}・商品總量不變</p>
+          {!qtyOk && <p className="text-warn">請回上面填好數量。</p>}
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="btn" onClick={changeTo}>更換搬到位置</button>
+            <button type="button" className="btn-primary" disabled={!qtyOk || m.isPending} onClick={() => m.mutate()}>{m.isPending ? "搬移中…" : "確認搬移"}</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
               <span className="text-[18px]">搬多少：</span>
               <input type="number" min={1} max={line.quantity} inputMode="numeric" className="input mt-0 max-w-[180px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="搬移數量" />
               <span className="text-[24px] font-bold">{line.product.unit}</span>
@@ -181,18 +194,6 @@ export default function Transfer() {
         <FloorplanCanvas layout={layout.data} racks={toDraft(layout.data)} editing={false} selectedLocation={null} selectedRackKey={null} highlightCodes={new Set()} marks={marks} onSelectLocation={pick} onSelectRack={() => undefined} onRacksChange={() => undefined} />
       )}
 
-      {/* 最後確認 */}
-      {phase === "confirm" && fromLoc && toLoc && line && (
-        <div className="panel space-y-3 border-l-8 border-brand">
-          <p className="text-[26px] font-bold">{line.product.name} {quantity} {line.product.unit}，從 {fromLoc.code} → {toLoc.code}</p>
-          <p className="muted">批次 {line.batch.batchNo}・{locationWords(fromLoc.code)} → {locationWords(toLoc.code)}・商品總量不變</p>
-          {!qtyOk && <p className="text-warn">請回上面填好數量。</p>}
-          <div className="flex flex-wrap gap-3">
-            <button type="button" className="btn" onClick={changeTo}>更換搬到位置</button>
-            <button type="button" className="btn-primary" disabled={!qtyOk || m.isPending} onClick={() => m.mutate()}>{m.isPending ? "搬移中…" : "確認搬移"}</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
