@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { get } from "../api/client";
 import type { SearchResult, StockLine } from "../api/types";
 import { Card, Collapsible, PageTitle, fmtDate } from "../components/ui";
+import { SearchIcon } from "../components/icons";
 
 /** 查庫存（FR-019）：先看「商品、總量、位置、最近到期日」，展開才看各批次；不同單位分開。 */
 export default function Inventory() {
@@ -31,7 +32,7 @@ export default function Inventory() {
       <PageTitle sub="輸入商品名稱、儲位或批次編號">查庫存</PageTitle>
       <form className="flex gap-3" onSubmit={submit}>
         <input className="input mt-0 flex-1" placeholder="例如：甘藍菜、A-01-02" value={input} onChange={(e) => setInput(e.target.value)} autoFocus aria-label="搜尋" />
-        <button className="btn-primary" type="submit">🔍 找貨</button>
+        <button className="btn-primary" type="submit"><SearchIcon size={22} />找貨</button>
       </form>
       {!q && (
         <p className="muted">或 <Link className="text-brand underline" to="/floorplan">直接看平面圖</Link>，點儲位查看內容。</p>

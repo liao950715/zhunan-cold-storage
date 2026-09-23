@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { get } from "../api/client";
 import type { Dashboard as DashboardData } from "../api/types";
 import { Card, Collapsible, PageTitle, fmtDate } from "../components/ui";
+import { InboundIcon, OutboundIcon, SearchIcon } from "../components/icons";
 
 /** 首頁：1 找貨 → 2 入庫／出庫 → 3 需要處理 → 4 庫存概況。 */
 export default function Dashboard() {
@@ -26,13 +27,13 @@ export default function Dashboard() {
 
       <form onSubmit={search} className="flex gap-3">
         <input className="input mt-0 flex-1" placeholder="輸入商品名稱或儲位，例如：甘藍菜、A-01-02" value={q} onChange={(e) => setQ(e.target.value)} aria-label="搜尋商品或儲位" />
-        <button className="btn-primary" type="submit">🔍 找貨</button>
+        <button className="btn-primary" type="submit"><SearchIcon size={22} />找貨</button>
       </form>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <BigLink to="/inventory" icon="🔍" title="查庫存" hint="找商品、看數量與位置" />
-        <BigLink to="/inbound" icon="📥" title="入庫" hint="貨物放進冷凍庫" primary />
-        <BigLink to="/outbound" icon="📤" title="出庫" hint="貨物從冷凍庫取出" primary />
+        <BigLink to="/inventory" icon={<SearchIcon size={30} />} title="查庫存" hint="找商品、看數量與位置" />
+        <BigLink to="/inbound" icon={<InboundIcon size={30} />} title="入庫" hint="貨物放進冷凍庫" primary />
+        <BigLink to="/outbound" icon={<OutboundIcon size={30} />} title="出庫" hint="貨物從冷凍庫取出" primary />
       </div>
 
       <Card title={`需要處理（${todo}）`}>
@@ -81,10 +82,10 @@ export default function Dashboard() {
   );
 }
 
-function BigLink({ to, icon, title, hint, primary }: { to: string; icon: string; title: string; hint: string; primary?: boolean }) {
+function BigLink({ to, icon, title, hint, primary }: { to: string; icon: React.ReactNode; title: string; hint: string; primary?: boolean }) {
   return (
     <Link to={to} className={`flex min-h-[110px] flex-col justify-center rounded-xl px-5 py-4 shadow-sm ${primary ? "bg-brand text-white hover:bg-brand-dark" : "bg-white text-ink hover:bg-brand-soft"}`}>
-      <span className="text-[26px] font-bold"><span aria-hidden className="mr-2">{icon}</span>{title}</span>
+      <span className="flex items-center gap-3 text-[26px] font-bold">{icon}{title}</span>
       <span className={`text-[16px] ${primary ? "text-white/90" : "text-ink-2"}`}>{hint}</span>
     </Link>
   );

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* 芫荽 Iansui（SIL OFL 1.1，見 public/fonts/OFL.txt） */
+@font-face {
+  font-family: "Iansui";
+  src: url("/fonts/Iansui-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
 /* 配色：暖白底、深色字、深藍操作（給中老年使用者：大字、對比清楚、不只靠顏色） */
 @theme {
   --color-bg: #f5f6f8;
@@ -18,6 +26,7 @@
 }
 
 html {
+  font-family: "Iansui", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
   font-size: 18px;
   color: var(--color-ink);
   background: var(--color-bg);
