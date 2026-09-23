@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+server/prisma/*.db*
+playwright-report/
+test-results/
+.DS_Store
+Thumbs.db
+*.log
