@@ -6,6 +6,7 @@ import { useInvalidateStock, useProducts } from "../api/hooks";
 import type { FefoSuggestion, Product, ProductStock } from "../api/types";
 import ProductSelect from "../components/ProductSelect";
 import { Message, PageTitle, Step, fmtDate } from "../components/ui";
+import { locationWords } from "../lib/words";
 
 interface Line { batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; quantity: number }
 
@@ -100,7 +101,7 @@ export default function Outbound() {
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{product.name}，出庫 {total} {unit}</p>
           {active.map((l) => (
-            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b> 取 {l.quantity} {unit}<span className="ml-2 muted">到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
+            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}<span className="ml-2 muted">到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
           ))}
         </div>
         {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
@@ -137,12 +138,12 @@ export default function Outbound() {
           <p className="muted">{product ? "填好數量後，這裡會列出建議的取貨位置（先拿快到期的）。" : "請先選商品。"}</p>
         ) : (
           <div className="space-y-3">
-            {!preset.locationId && <p className="muted">系統建議優先出即將到期的貨；不合適可以按「調整」。</p>}
+            {!preset.locationId && <p className="muted">建議優先出庫（先到期先出）：系統先列出最早到期的貨；不合適可以按「調整」。</p>}
             <div className="divide-y divide-line">
               {lines.map((l, i) => (adjusting || l.quantity > 0) && (
                 <div key={`${l.batchId}-${l.locationId}`} className={`flex flex-wrap items-center gap-3 py-3 ${l.quantity > 0 ? "" : "opacity-70"}`}>
                   <div className="flex-1">
-                    <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}</p>
+                    <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}{i === 0 && !preset.locationId && <span className="tag-info ml-2 align-middle text-[14px]">最早到期</span>}</p>
                     <p className="muted">
                       這裡有 {l.available} {unit}・到期 {fmtDate(l.expiryDate)}
                       {l.expired && <span className="tag-bad ml-2">已過期</span>}

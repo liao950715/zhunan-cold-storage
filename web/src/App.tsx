@@ -4,6 +4,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import Shell from "./components/Shell";
 import Login from "./pages/Login";
+import Pair from "./pages/Pair";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import Inventory from "./pages/Inventory";
@@ -25,6 +26,7 @@ export default function App() {
         <BrowserRouter>
           <ConfirmProvider>
           <Routes>
+            <Route path="/pair" element={<Pair />} />
             <Route path="/login" element={<Login />} />
             <Route element={<Shell />}>
               <Route path="/" element={<Dashboard />} />

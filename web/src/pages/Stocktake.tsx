@@ -39,39 +39,39 @@ export default function Stocktake() {
       {tab === "new" && <NewStocktake onDone={async (id) => { await invalidate(); setTab("list"); setMsg({ kind: "ok", text: `盤點單 #${id} 已提交，等待管理員核准；正式庫存尚未變動` }); }} />}
       {tab === "list" && (
         <Card>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">#</th><th>狀態</th><th>範圍</th><th>提交</th><th className="text-right">明細</th><th className="text-right">差異筆數</th><th>審核</th><th></th></tr></thead>
+          <table className="w-full text-[16px]">
+            <thead className="text-left text-ink-2"><tr><th className="py-1">#</th><th>狀態</th><th>範圍</th><th>提交</th><th className="text-right">明細</th><th className="text-right">差異筆數</th><th>審核</th><th></th></tr></thead>
             <tbody>
               {list.data?.items.map((s) => (
                 <Fragment key={s.id}>
-                  <tr className="border-t border-slate-100">
+                  <tr className="border-t border-line">
                     <td className="py-1.5">{s.id}</td>
-                    <td><span className={`rounded px-1.5 py-0.5 text-xs ${s.status === "PENDING" ? "bg-amber-100 text-amber-800" : s.status === "APPROVED" ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-600"}`}>{STATUS[s.status]}</span></td>
+                    <td><span className={s.status === "PENDING" ? "tag-warn" : s.status === "APPROVED" ? "tag-ok" : "tag-info"}>{STATUS[s.status]}</span></td>
                     <td>{s.warehouse?.name ?? "全部"}</td>
                     <td className="text-xs">{s.submittedBy.displayName}<br />{fmtTime(s.submittedAt)}</td>
                     <td className="text-right">{s.items.length}</td>
                     <td className="text-right">{s.items.filter((i) => i.diff !== 0).length}</td>
                     <td className="text-xs">{s.reviewedBy ? <>{s.reviewedBy.displayName}<br />{fmtTime(s.reviewedAt!)}{s.reviewNote && <><br />「{s.reviewNote}」</>}</> : "—"}</td>
                     <td className="text-right whitespace-nowrap">
-                      <button className="text-sky-700 hover:underline" onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "收合" : "明細"}</button>
+                      <button className="text-brand-deep underline" onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "收合" : "明細"}</button>
                       {s.status === "PENDING" && user?.role === "ADMIN" && (
                         <>
-                          <button className="ml-3 text-green-700 hover:underline" onClick={async () => { const note = await dialog.prompt(`核准盤點 #${s.id}：備註（可留空）`); if (note !== null) review.mutate({ id: s.id, action: "approve", note }); }}>核准</button>
-                          <button className="ml-3 text-red-700 hover:underline" onClick={async () => { const note = await dialog.prompt(`退回盤點 #${s.id}：原因`); if (note !== null) review.mutate({ id: s.id, action: "reject", note }); }}>退回</button>
+                          <button className="btn-sm ml-2" onClick={async () => { const note = await dialog.prompt(`核准盤點 #${s.id}：備註（可留空）`); if (note !== null) review.mutate({ id: s.id, action: "approve", note }); }}>核准</button>
+                          <button className="btn-sm ml-2 text-bad" onClick={async () => { const note = await dialog.prompt(`退回盤點 #${s.id}：原因`); if (note !== null) review.mutate({ id: s.id, action: "reject", note }); }}>退回</button>
                         </>
                       )}
                     </td>
                   </tr>
                   {open === s.id && (
                     <tr>
-                      <td colSpan={8} className="bg-slate-50 p-2">
-                        <table className="w-full text-xs">
-                          <thead className="text-slate-500"><tr><th className="text-left">儲位</th><th className="text-left">商品</th><th className="text-left">批次</th><th className="text-right">系統基準</th><th className="text-right">實盤</th><th className="text-right">差異</th></tr></thead>
+                      <td colSpan={8} className="bg-bg-2 p-3">
+                        <table className="w-full text-[16px]">
+                          <thead className="text-ink-2"><tr><th className="text-left">儲位</th><th className="text-left">商品</th><th className="text-left">批次</th><th className="text-right">系統基準</th><th className="text-right">實盤</th><th className="text-right">差異</th></tr></thead>
                           <tbody>
                             {s.items.map((i) => (
                               <tr key={i.id} className={i.diff !== 0 ? "font-medium" : ""}>
                                 <td>{i.locationCode}</td><td>{i.product.name}</td><td className="font-mono">{i.batchNo}</td><td className="text-right">{i.systemQty}</td><td className="text-right">{i.countedQty}</td>
-                                <td className={`text-right ${i.diff < 0 ? "text-red-600" : i.diff > 0 ? "text-green-700" : "text-slate-400"}`}>{i.diff > 0 ? `+${i.diff}` : i.diff}</td>
+                                <td className={`text-right ${i.diff < 0 ? "text-bad" : i.diff > 0 ? "text-ok" : "text-ink-2"}`}>{i.diff > 0 ? `+${i.diff}` : i.diff}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -82,7 +82,7 @@ export default function Stocktake() {
                   )}
                 </Fragment>
               ))}
-              {list.data?.items.length === 0 && <tr><td colSpan={8} className="py-3 text-center text-slate-500">尚無盤點單</td></tr>}
+              {list.data?.items.length === 0 && <tr><td colSpan={8} className="py-3 text-center text-ink-2">尚無盤點單</td></tr>}
             </tbody>
           </table>
         </Card>
@@ -117,26 +117,29 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
         </select>
         <input className="input mt-0 flex-1 min-w-48" placeholder="備註" value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
-      <table className="w-full text-sm">
-        <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">儲位</th><th>商品</th><th>批次</th><th>到期日</th><th className="text-right">系統數量</th><th className="text-right w-28">實盤數量</th><th className="text-right">差異</th></tr></thead>
-        <tbody>
-          {baseline.data?.items.map((b) => {
-            const c = counted(b);
-            return (
-              <tr key={key(b)} className={`border-t border-slate-100 ${c !== b.systemQty ? "bg-amber-50" : ""}`}>
-                <td className="py-1 font-medium">{b.locationCode}</td><td>{b.product.name}</td><td className="font-mono text-xs">{b.batchNo}</td><td>{b.expiryDate}</td>
-                <td className="text-right">{b.systemQty} {b.product.unit}</td>
-                <td className="text-right"><input type="number" min={0} className="input mt-0 text-right" value={c} onChange={(e) => setCounts({ ...counts, [key(b)]: Number(e.target.value) })} /></td>
-                <td className={`text-right ${c - b.systemQty < 0 ? "text-red-600" : c - b.systemQty > 0 ? "text-green-700" : "text-slate-400"}`}>{c - b.systemQty > 0 ? "+" : ""}{c - b.systemQty}</td>
-              </tr>
-            );
-          })}
-          {baseline.data?.items.length === 0 && <tr><td colSpan={7} className="py-2 text-slate-500">此範圍沒有庫存可盤點</td></tr>}
-        </tbody>
-      </table>
+      <div className="divide-y divide-line">
+        {baseline.data?.items.map((b) => {
+          const c = counted(b);
+          const d = c - b.systemQty;
+          return (
+            <div key={key(b)} className={`flex flex-wrap items-center gap-3 py-3 ${d !== 0 ? "-mx-2 rounded-[10px] bg-warn-soft/40 px-2" : ""}`}>
+              <div className="min-w-[200px] flex-1">
+                <p className="text-[20px] font-bold">{b.locationCode}　{b.product.name}</p>
+                <p className="muted">系統數量 <b className="text-ink">{b.systemQty} {b.product.unit}</b>・到期 {b.expiryDate}・批次 {b.batchNo}</p>
+              </div>
+              <label className="flex items-center gap-2 text-[18px]">實盤
+                <input type="number" min={0} inputMode="numeric" className="input mt-0 w-28 text-right text-[22px] font-bold" value={c} onChange={(e) => setCounts({ ...counts, [key(b)]: Number(e.target.value) })} aria-label={`${b.locationCode} 實盤數量`} />
+                {b.product.unit}
+              </label>
+              <span className={`w-24 text-right text-[18px] font-bold ${d < 0 ? "text-bad" : d > 0 ? "text-ok" : "text-ink-2"}`}>{d === 0 ? "相符" : d > 0 ? `多 ${d}` : `少 ${-d}`}</span>
+            </div>
+          );
+        })}
+        {baseline.data?.items.length === 0 && <p className="muted py-2">此範圍沒有庫存可盤點</p>}
+      </div>
       {submit.error && <Message kind="error">{errorMessage(submit.error)}</Message>}
       <div className="mt-3 flex items-center gap-3">
-        <span className="text-sm text-slate-600">{diffs} 筆有差異</span>
+        <span className="text-[18px] text-ink-2">{diffs} 筆有差異</span>
         <button className="btn-primary ml-auto" disabled={!baseline.data?.items.length || submit.isPending} onClick={async () => { if (await dialog.confirm("提交盤點", `${baseline.data!.items.length} 筆明細，${diffs} 筆差異。\n提交後不會立即改庫存，需管理員核准。`)) submit.mutate(); }}>提交盤點</button>
       </div>
     </Card>

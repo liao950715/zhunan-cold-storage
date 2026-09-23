@@ -5,6 +5,9 @@
 
 > 所有 `id` 為自增整數主鍵；所有表含 `createdAt`、`updatedAt`（DateTime）。日期型欄位（到期日、入庫日）以 `DateTime` 儲存、API 以 `YYYY-MM-DD` 交換。
 
+> **v0.2 變更（2026-09-23）**：資料表改以 SQL 直接建立於 Durable Object SQLite（`worker/src/db/schema.ts`），欄位與約束同本文件；日期欄位改存 `YYYY-MM-DD` 文字、時間戳存 ISO 字串；新增 `PairAttempt`（配對節流）與 `meta`（schema 版本）表。`CHECK (quantity >= 0)` 直接寫在建表語句。
+
+
 ---
 
 ## 1. ER 關係總覽

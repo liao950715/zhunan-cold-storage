@@ -1,83 +1,119 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock } from "../api/hooks";
 import type { LocationDetail, Movement } from "../api/types";
 import LocationSelect from "../components/LocationSelect";
-import { Card, Field, Message, PageTitle, fmtTime } from "../components/ui";
-import { useDialog } from "../components/ConfirmDialog";
+import { Card, Field, Message, PageTitle, Step, fmtDate, fmtTime } from "../components/ui";
+import { locationLabel } from "../lib/words";
 
-/** FR-014 直接報損：選儲位 → 批次 → 數量與原因 → 立即扣可用庫存。 */
+const REASONS = ["凍傷", "壓損", "腐爛", "包裝破損", "其他"];
+
+/** FR-014 報損：哪個儲位 → 哪一批、多少、原因 → 確認後立即扣庫存。 */
 export default function Damage() {
   const [params] = useSearchParams();
   const invalidate = useInvalidateStock();
-  const dialog = useDialog();
   const [locId, setLocId] = useState<number | null>(Number(params.get("locationId")) || null);
   const [batchId, setBatchId] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(0);
   const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
 
   const loc = useQuery({ queryKey: ["location", locId], queryFn: () => get<LocationDetail>(`/locations/${locId}`), enabled: !!locId });
-  const line = loc.data?.lines.find((l) => l.batch.id === batchId) ?? null;
-  const history = useQuery({ queryKey: ["movements", "DAMAGE"], queryFn: () => get<{ items: Movement[] }>("/movements?type=DAMAGE&limit=20") });
+  const line = loc.data?.lines.find((l) => l.batch.id === batchId) ?? (loc.data?.lines.length === 1 ? loc.data.lines[0] : null);
+  if (line && batchId !== line.batch.id) setBatchId(line.batch.id);
+  const history = useQuery({ queryKey: ["movements", "DAMAGE"], queryFn: () => get<{ items: Movement[] }>("/movements?type=DAMAGE&limit=10") });
+  const ok = !!line && quantity > 0 && quantity <= line.quantity && reason.trim().length > 0;
 
   const m = useMutation({
-    mutationFn: () => post<{ batchNo: string; locationCode: string; after: number }>("/stock/damage", { batchId, locationId: locId, quantity, reason }, idemKey),
+    mutationFn: () => post<{ batchNo: string; locationCode: string; after: number }>("/stock/damage", { batchId: line!.batch.id, locationId: locId, quantity, reason: reason.trim() }, idemKey),
     onSuccess: async (r) => {
-      setResult(`已報損 ${quantity} ${line?.product.unit}：${r.locationCode} 批次 ${r.batchNo} 剩 ${r.after}`);
+      setResult(`${line!.product.name} ${quantity} ${line!.product.unit} 已報損（${r.locationCode}，原因：${reason}）。該儲位剩 ${r.after} ${line!.product.unit}。`);
       await invalidate();
       setIdemKey(crypto.randomUUID());
-      setQuantity(0);
-      setReason("");
-      setBatchId(null);
+      setConfirming(false); setQuantity(0); setReason(""); setBatchId(null);
     },
+    onError: () => setConfirming(false),
   });
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!line || quantity <= 0 || quantity > line.quantity || !reason.trim()) return;
-    if (await dialog.confirm("確認報損", `${line.product.name} ${quantity} ${line.product.unit}（${loc.data!.location.code} 批次 ${line.batch.batchNo}）\n原因：${reason}\n確認後立即扣除庫存。`)) m.mutate();
+  if (result) {
+    return (
+      <div className="space-y-5">
+        <PageTitle>報損完成</PageTitle>
+        <div className="panel space-y-2 border-l-8 border-ok"><p className="text-[26px] font-bold text-ok">✓ 報損完成</p><p className="text-[20px]">{result}</p></div>
+        <div className="flex flex-wrap gap-3"><button className="btn-primary" onClick={() => setResult(null)}>再報損一筆</button><Link className="btn" to="/movements?type=DAMAGE">看報損紀錄</Link><Link className="btn" to="/">回首頁</Link></div>
+      </div>
+    );
+  }
+  if (confirming && line && loc.data) {
+    return (
+      <div className="space-y-5">
+        <PageTitle sub="確認後會立即扣除庫存，無法取消">確認報損</PageTitle>
+        <div className="panel space-y-3">
+          <p className="text-[26px] font-bold">{line.product.name}，報損 {quantity} {line.product.unit}</p>
+          <p className="text-[22px]">在 <b>{locationLabel(loc.data.location.code)}</b></p>
+          <p className="text-[22px]">原因：<b>{reason}</b></p>
+          <p className="muted">批次 {line.batch.batchNo}・到期 {fmtDate(line.batch.expiryDate)}</p>
+        </div>
+        {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
+        <div className="flex flex-wrap gap-3"><button className="btn" onClick={() => setConfirming(false)}>返回修改</button><button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending}>{m.isPending ? "處理中…" : "確認報損"}</button></div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      <PageTitle sub="登記損壞商品，確認後立即扣除可用庫存並留下紀錄">報損管理</PageTitle>
-      {result && <Message kind="ok">{result}</Message>}
-      <form onSubmit={submit} className="grid gap-3 lg:grid-cols-2">
-        <Card title="1. 儲位與批次">
-          <LocationSelect value={locId} onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); }} />
-          {loc.data?.lines.map((l) => (
-            <label key={l.inventoryId} className={`mt-2 flex items-center gap-2 rounded border px-2 py-1 text-sm ${batchId === l.batch.id ? "border-sky-500 bg-sky-50" : "border-slate-200"}`}>
-              <input type="radio" name="batch" checked={batchId === l.batch.id} onChange={() => setBatchId(l.batch.id)} />
-              <span className="font-mono text-xs">{l.batch.batchNo}</span>
-              <span>{l.product.name}</span>
-              <span className="ml-auto">{l.quantity} {l.product.unit}</span>
-            </label>
-          ))}
-          {loc.data && loc.data.lines.length === 0 && <p className="mt-2 text-sm text-slate-500">此儲位沒有庫存。</p>}
-        </Card>
-        <Card title="2. 報損數量與原因">
-          <Field label={`數量${line ? `（可用 ${line.quantity} ${line.product.unit}）` : ""}`}><input type="number" min={1} max={line?.quantity} className="input" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} disabled={!line} required /></Field>
-          <Field label="原因 *"><input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例：凍傷、壓損、腐爛" required /></Field>
-          {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
-          <button type="submit" className="btn-primary mt-3" disabled={!line || quantity <= 0 || quantity > (line?.quantity ?? 0) || !reason.trim() || m.isPending}>確認報損</button>
-        </Card>
-      </form>
-      <Card title="最近報損紀錄">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">時間</th><th>商品</th><th>批次</th><th>儲位</th><th className="text-right">數量</th><th>原因</th><th>操作者</th></tr></thead>
-          <tbody>
-            {history.data?.items.map((mv) => (
-              <tr key={mv.id} className="border-t border-slate-100">
-                <td className="py-1 text-xs">{fmtTime(mv.createdAt)}</td><td>{mv.productNameSnapshot}</td><td className="font-mono text-xs">{mv.batch.batchNo}</td><td>{mv.locationCodeSnapshot}</td><td className="text-right">{mv.quantity} {mv.product.unit}</td><td>{mv.reason}</td><td>{mv.operator.displayName}</td>
-              </tr>
+    <div className="space-y-5">
+      <PageTitle sub="登記損壞的貨；確認後立即從庫存扣除並留下紀錄">報損</PageTitle>
+      {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
+      <Step n={1} title="哪個儲位的貨？" done={!!loc.data && loc.data.lines.length > 0}>
+        <LocationSelect value={locId} onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); setQuantity(0); }} />
+        {loc.data && loc.data.lines.length === 0 && <p className="mt-2 text-warn">這個儲位沒有貨。</p>}
+      </Step>
+      <Step n={2} title="哪一批、多少？" done={!!line && quantity > 0 && quantity <= line.quantity}>
+        {!loc.data || loc.data.lines.length === 0 ? <p className="muted">請先選儲位。</p> : (
+          <div className="space-y-3">
+            {loc.data.lines.length > 1 && loc.data.lines.map((l) => (
+              <label key={l.inventoryId} className={`flex min-h-[52px] items-center gap-3 rounded-[10px] border px-4 text-[18px] ${batchId === l.batch.id ? "border-brand bg-brand-soft" : "border-line"}`}>
+                <input type="radio" name="batch" className="h-5 w-5" checked={batchId === l.batch.id} onChange={() => setBatchId(l.batch.id)} />
+                <span className="font-bold">{l.product.name} {l.quantity} {l.product.unit}</span>
+                <span className="muted ml-auto">到期 {fmtDate(l.batch.expiryDate)}・批次 {l.batch.batchNo}</span>
+              </label>
             ))}
-            {history.data?.items.length === 0 && <tr><td colSpan={7} className="py-2 text-slate-500">尚無報損紀錄</td></tr>}
-          </tbody>
-        </table>
+            {line && (
+              <div className="flex items-center gap-3">
+                <input type="number" min={1} max={line.quantity} inputMode="numeric" className="input mt-0 max-w-[200px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="報損數量" />
+                <span className="text-[24px] font-bold">{line.product.unit}</span>
+                <span className="muted">這裡有 {line.quantity} {line.product.unit}</span>
+              </div>
+            )}
+            {line && quantity > line.quantity && <p className="text-bad">最多只能報損 {line.quantity} {line.product.unit}。</p>}
+          </div>
+        )}
+      </Step>
+      <Step n={3} title="原因" done={reason.trim().length > 0}>
+        <div className="flex flex-wrap gap-2">
+          {REASONS.map((r) => <button key={r} type="button" className={reason === r ? "btn-primary" : "btn"} onClick={() => setReason(r)}>{r}</button>)}
+        </div>
+        {(reason === "其他" || !REASONS.includes(reason)) && (
+          <Field label="請說明原因"><input className="input" value={reason === "其他" ? "" : reason} onChange={(e) => setReason(e.target.value)} placeholder="例：冷凍庫停電解凍" /></Field>
+        )}
+      </Step>
+      <Step n={4} title="確認報損">
+        {ok ? <p className="text-[20px]"><b>{line!.product.name}</b> {quantity} {line!.product.unit}，{loc.data!.location.code}，原因：{reason}</p> : <p className="text-warn">請先完成上面的步驟。</p>}
+        <button type="button" className="btn-primary mt-4 w-full sm:w-auto" disabled={!ok} onClick={() => setConfirming(true)}>下一步：核對並報損</button>
+      </Step>
+      <Card title="最近報損">
+        {history.data?.items.length === 0 && <p className="muted">尚無報損紀錄</p>}
+        <div className="divide-y divide-line">
+          {history.data?.items.map((mv) => (
+            <div key={mv.id} className="flex flex-wrap items-center gap-3 py-3">
+              <div className="flex-1"><p className="text-[20px] font-bold">{mv.productNameSnapshot} −{mv.quantity} {mv.product.unit}<span className="ml-2 font-normal text-ink-2">{mv.locationCodeSnapshot}</span></p><p className="muted">{mv.reason}・{mv.operator.displayName}・{fmtTime(mv.createdAt)}</p></div>
+            </div>
+          ))}
+        </div>
       </Card>
     </div>
   );

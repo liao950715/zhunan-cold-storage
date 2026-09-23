@@ -1,0 +1,11 @@
+{
+  "name": "zhunan-cold-storage-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "WAREHOUSE", "class_name": "WarehouseDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WarehouseDO"] }],
+  "vars": { "JWT_SECRET": "test-secret", "SYNC_SECRET": "test-sync-code-0123456789" }
+}

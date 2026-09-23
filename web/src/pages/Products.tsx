@@ -27,20 +27,20 @@ export default function Products() {
       <PageTitle sub="每種商品自行設定單位、低庫存警戒值與效期提醒天數">商品管理</PageTitle>
       <div className="flex flex-wrap items-center gap-2">
         <input className="input mt-0 w-56" placeholder="搜尋名稱／類別" value={q} onChange={(e) => setQ(e.target.value)} />
-        <label className="text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> 顯示已停用</label>
+        <label className="text-[16px]"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> 顯示已停用</label>
         <button className="btn-primary ml-auto" onClick={() => setCreating(true)}>＋ 新增商品</button>
       </div>
       {msg && <Message kind={msg.kind}>{msg.text}</Message>}
       {creating && <CreateProductInline onCancel={() => setCreating(false)} onCreated={(p) => { setCreating(false); setMsg({ kind: "ok", text: `已新增商品「${p.name}」` }); }} />}
       {editing && <EditProduct product={editing} onDone={(text) => { setEditing(null); if (text) setMsg({ kind: "ok", text }); }} />}
       <Card>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-slate-500">
+        <table className="w-full text-[16px]">
+          <thead className="text-left text-ink-2">
             <tr><th className="py-1">名稱</th><th>類別</th><th>單位</th><th className="text-right">低庫存警戒</th><th className="text-right">效期提醒</th><th>狀態</th><th></th></tr>
           </thead>
           <tbody>
             {items.map((p) => (
-              <tr key={p.id} className={`border-t border-slate-100 ${p.status === "INACTIVE" ? "text-slate-400" : ""}`}>
+              <tr key={p.id} className={`border-t border-line ${p.status === "INACTIVE" ? "text-ink-2" : ""}`}>
                 <td className="py-1.5 font-medium">{p.name}</td>
                 <td>{p.category ?? "—"}</td>
                 <td>{p.unit}</td>
@@ -48,12 +48,12 @@ export default function Products() {
                 <td className="text-right">{p.expiryAlertDays} 天</td>
                 <td>{p.status === "ACTIVE" ? "啟用" : "停用"}</td>
                 <td className="text-right whitespace-nowrap">
-                  <button className="text-sky-700 hover:underline mr-3" onClick={() => setEditing(p)}>編輯</button>
-                  <button className="text-slate-500 hover:underline" onClick={() => toggle.mutate(p)}>{p.status === "ACTIVE" ? "停用" : "啟用"}</button>
+                  <button className="text-brand-deep underline mr-3" onClick={() => setEditing(p)}>編輯</button>
+                  <button className="text-ink-2 hover:underline" onClick={() => toggle.mutate(p)}>{p.status === "ACTIVE" ? "停用" : "啟用"}</button>
                 </td>
               </tr>
             ))}
-            {items.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-slate-500">沒有符合的商品</td></tr>}
+            {items.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-ink-2">沒有符合的商品</td></tr>}
           </tbody>
         </table>
       </Card>

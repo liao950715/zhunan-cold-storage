@@ -39,7 +39,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl space-y-3">
             <h2 id="dlg-title" className="font-bold text-slate-800">{pending.title}</h2>
-            {pending.message && <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700">{pending.message}</pre>}
+            {pending.message && <pre className="whitespace-pre-wrap font-sans text-[16px] text-slate-700">{pending.message}</pre>}
             {pending.kind === "prompt" && (
               <input
                 ref={inputRef}

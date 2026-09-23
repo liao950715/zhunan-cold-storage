@@ -43,11 +43,11 @@ export default function Settings() {
       {msg && <Message kind={msg.kind}>{msg.text}</Message>}
       <div className="grid gap-3 lg:grid-cols-[1fr_320px]">
         <Card title="使用者">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">帳號</th><th>名稱</th><th>角色</th><th>狀態</th><th></th></tr></thead>
+          <table className="w-full text-[16px]">
+            <thead className="text-left text-ink-2"><tr><th className="py-1">帳號</th><th>名稱</th><th>角色</th><th>狀態</th><th></th></tr></thead>
             <tbody>
               {users.data?.items.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100">
+                <tr key={u.id} className="border-t border-line">
                   <td className="py-1.5 font-mono">{u.username}</td>
                   <td>{u.displayName}</td>
                   <td>
@@ -55,10 +55,10 @@ export default function Settings() {
                       <option value="ADMIN">管理員</option><option value="STAFF">工作人員</option>
                     </select>
                   </td>
-                  <td>{u.status === "ACTIVE" ? "啟用" : <span className="text-slate-400">停用</span>}</td>
+                  <td>{u.status === "ACTIVE" ? "啟用" : <span className="text-ink-2">停用</span>}</td>
                   <td className="text-right whitespace-nowrap">
-                    <button className="text-sky-700 hover:underline" onClick={async () => { const p = await dialog.prompt(`為 ${u.username} 設定新密碼（至少 6 碼）`); if (p) update.mutate({ id: u.id, data: { password: p } }); }}>重設密碼</button>
-                    {u.id !== user.id && <button className="ml-3 text-slate-500 hover:underline" onClick={() => update.mutate({ id: u.id, data: { status: u.status === "ACTIVE" ? "DISABLED" : "ACTIVE" } })}>{u.status === "ACTIVE" ? "停用" : "啟用"}</button>}
+                    <button className="text-brand-deep underline" onClick={async () => { const p = await dialog.prompt(`為 ${u.username} 設定新密碼（至少 6 碼）`); if (p) update.mutate({ id: u.id, data: { password: p } }); }}>重設密碼</button>
+                    {u.id !== user.id && <button className="ml-3 text-ink-2 hover:underline" onClick={() => update.mutate({ id: u.id, data: { status: u.status === "ACTIVE" ? "DISABLED" : "ACTIVE" } })}>{u.status === "ACTIVE" ? "停用" : "啟用"}</button>}
                   </td>
                 </tr>
               ))}

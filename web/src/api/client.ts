@@ -22,7 +22,10 @@ export async function api<T>(path: string, init: RequestInit & { idempotencyKey?
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiRequestError(res.status, body.error ?? { code: "INTERNAL_ERROR", message: `請求失敗（${res.status}）` });
+    const error: ApiError = body.error ?? { code: "INTERNAL_ERROR", message: `請求失敗（${res.status}）` };
+    // 尚未配對的裝置：導到同步碼頁（登入頁除外的所有 API 都會回 NOT_PAIRED）
+    if (error.code === "NOT_PAIRED" && !location.pathname.startsWith("/pair")) location.assign("/pair");
+    throw new ApiRequestError(res.status, error);
   }
   return body as T;
 }

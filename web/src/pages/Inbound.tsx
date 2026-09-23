@@ -7,6 +7,7 @@ import type { Product } from "../api/types";
 import LocationSelect from "../components/LocationSelect";
 import ProductSelect from "../components/ProductSelect";
 import { Collapsible, Field, Message, PageTitle, Step, fmtDate } from "../components/ui";
+import { locationWords } from "../lib/words";
 
 interface Alloc { locationId: number | null; quantity: number }
 
@@ -108,7 +109,7 @@ export default function Inbound() {
           <p className="text-[26px] font-bold">{product.name}，入庫 {quantity} {product.unit}</p>
           {allocs.map((a, i) => {
             const loc = locName(a.locationId);
-            return <p key={i} className="text-[22px]">放在 <b>{loc?.warehouseCode} 庫・{loc?.code}</b>{split && <>：{a.quantity} {product.unit}</>}</p>;
+            return <p key={i} className="text-[22px]">放在 <b>{loc?.code}</b><span className="ml-2 text-[18px] text-ink-2">{loc ? locationWords(loc.code) : ""}</span>{split && <>：{a.quantity} {product.unit}</>}</p>;
           })}
           <p className="text-[20px]">到期日 {fmtDate(expiryDate)}</p>
           {(receivedDate !== todayStr() || note) && <p className="muted">入庫日期 {fmtDate(receivedDate)}{note && `・備註：${note}`}</p>}
@@ -139,8 +140,13 @@ export default function Inbound() {
       </Step>
 
       <Step n={3} title="確認到期日" done={!!expiryDate}>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {[7, 14, 30, 60].map((d) => (
+            <button key={d} type="button" className={expiryDate === addDays(d) ? "btn-primary" : "btn"} onClick={() => setExpiryDate(addDays(d))}>{d} 天後</button>
+          ))}
+        </div>
         <input type="date" className="input mt-0 max-w-[260px]" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} aria-label="到期日" />
-        <p className="mt-1 muted">請依實際保存期限填寫，系統不會自行推算。</p>
+        <p className="mt-1 muted">請依實際保存期限填寫或修改，系統不會自行推算。目前：{fmtDate(expiryDate)}</p>
       </Step>
 
       <Step n={4} title="選擇放置位置" done={allocs.every((a) => a.locationId) && !mismatch}>
@@ -158,12 +164,12 @@ export default function Inbound() {
             </div>
           ))}
           {!split ? (
-            <button type="button" className="btn-sm" onClick={() => { setSplit(true); setAllocs([{ ...allocs[0], quantity: 0 }, { locationId: null, quantity: 0 }]); }}>分到其他儲位</button>
+            <button type="button" className="btn-sm" onClick={() => { setSplit(true); const first = Math.ceil(quantity / 2); setAllocs([{ ...allocs[0], quantity: first }, { locationId: null, quantity: quantity - first }]); }}>分到其他儲位</button>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" className="btn-sm" onClick={() => setAllocs([...allocs, { locationId: null, quantity: 0 }])}>＋ 再加一個儲位</button>
               <button type="button" className="btn-sm" onClick={() => { setSplit(false); setAllocs([{ locationId: allocs[0].locationId, quantity }]); }}>只放一個儲位</button>
-              <span className={`text-[18px] ${mismatch ? "font-bold text-bad" : "text-ink-2"}`}>分配合計 {allocated} / 入庫量 {quantity}</span>
+              <span className={`text-[18px] ${mismatch ? "font-bold text-bad" : "text-ink-2"}`}>{mismatch ? (allocated < quantity ? `還有 ${quantity - allocated} ${product?.unit ?? ""} 沒分配` : `多分配了 ${allocated - quantity} ${product?.unit ?? ""}`) : `分配合計 ${allocated} / 入庫量 ${quantity}`}</span>
             </div>
           )}
           {capacityWarnings.map((w) => <Message key={w} kind="warn">{w}</Message>)}

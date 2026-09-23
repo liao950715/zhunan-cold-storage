@@ -15,3 +15,8 @@ test-results/
 .DS_Store
 Thumbs.db
 *.log
+
+# Cloudflare
+worker/.dev.vars
+.wrangler/
+web/dev-dist/

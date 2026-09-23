@@ -13,7 +13,7 @@
 
 5. **每次修改前檢查現有程式**：先讀取要改的檔案與相關呼叫處，不盲改。
 6. **不得覆蓋使用者既有修改**：修改前確認 `git status`／`git diff`；不使用 `git checkout -- <file>`、`git reset --hard`、`git stash drop` 等會丟失他人工作的指令。
-7. 庫存數量的任何變更只能透過 `server/src/services/stockService.ts` 的交易函式；不得在其他地方直接寫 `Inventory`。
+7. 庫存數量的任何變更只能透過 `worker/src/services/stockService.ts` 的交易函式（`db.tx` 內）；不得在其他地方直接寫 `Inventory`。
 8. 權限檢查必須在後端 middleware 實作；前端隱藏按鈕不算完成。
 9. 使用繁體中文撰寫使用者可見文字與文件；程式識別字用英文。
 10. 不引入未在 `docs/TECHNICAL_DESIGN.md` 列出的重大依賴；需要時先說明原因。
@@ -29,7 +29,7 @@
 
 15. 功能完成且測試通過後建立 **Git commit**；訊息格式：`<type>(<scope>): <摘要>`（例：`feat(stock): 入庫多儲位分配與容量驗證`）。
 16. **不自動 push**；**禁止 force push**；不改寫已存在的提交歷史（不 `--amend` 他人提交、不 rebase 已共享分支）。
-17. 不 commit `server/prisma/*.db`、`node_modules`、`.env`（見 `.gitignore`）。
+17. 不 commit `worker/.dev.vars`（含同步碼與 JWT secret）、`.wrangler/`、`node_modules`（見 `.gitignore`）；正式 secret 只用 `wrangler secret put`。
 
 ## 5. 交付回報格式
 

@@ -8,21 +8,23 @@
   font-display: swap;
 }
 
-/* 配色：暖白底、深色字、深藍操作（給中老年使用者：大字、對比清楚、不只靠顏色） */
+/* Design System（docs/UI_DESIGN.md §2）：暖白底、深色字、柔和藍操作；狀態一律顏色＋文字 */
 @theme {
-  --color-bg: #f5f6f8;
-  --color-ink: #20252b;
-  --color-ink-2: #525c69;
-  --color-line: #d9dee5;
-  --color-brand: #175cd3;
-  --color-brand-dark: #124aa8;
-  --color-brand-soft: #e8f0fc;
-  --color-ok: #1e7a3c;
-  --color-ok-soft: #e4f5ea;
-  --color-warn: #7a4b00;
-  --color-warn-soft: #fff4d6;
-  --color-bad: #b42318;
-  --color-bad-soft: #fde8e6;
+  --color-bg: #fafaf7;
+  --color-bg-2: #f0f2f1;
+  --color-ink: #303735;
+  --color-ink-2: #626b68;
+  --color-line: #dde2e0;
+  --color-brand: #7297ac;        /* 選中底、外框、圖示、連結 */
+  --color-brand-dark: #5a8199;   /* 主要按鈕（白字對比 4.6:1） */
+  --color-brand-deep: #4a6c82;
+  --color-brand-soft: #e8f0f4;
+  --color-ok: #2f5d46;
+  --color-ok-soft: #dce8e2;
+  --color-warn: #7a4b1e;
+  --color-warn-soft: #eeddc7;
+  --color-bad: #8c3b32;
+  --color-bad-soft: #f3dedc;
 }
 
 html {
@@ -31,33 +33,27 @@ html {
   color: var(--color-ink);
   background: var(--color-bg);
 }
+/* 「文字放大」開關 */
+html[data-large="1"] { zoom: 1.12; }
 
 @layer components {
   .btn {
-    @apply inline-flex min-h-[52px] items-center justify-center gap-2 rounded-lg border border-line bg-white px-5 text-[18px] font-medium text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-[52px] items-center justify-center gap-2 rounded-[10px] border border-line bg-white px-5 text-[18px] font-medium text-ink hover:bg-bg-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply inline-flex min-h-[52px] items-center justify-center gap-2 rounded-lg bg-brand px-6 text-[18px] font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-[52px] items-center justify-center gap-2 rounded-[10px] bg-brand-dark px-6 text-[18px] font-bold text-white hover:bg-brand-deep disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-sm {
-    @apply inline-flex min-h-[40px] items-center justify-center rounded-lg border border-line bg-white px-3 text-[16px] text-ink hover:bg-slate-50 disabled:opacity-50;
+    @apply inline-flex min-h-[40px] items-center justify-center rounded-[10px] border border-line bg-white px-3 text-[16px] text-ink hover:bg-bg-2 disabled:opacity-50;
   }
   .input {
-    @apply mt-1 block w-full min-h-[52px] rounded-lg border border-line bg-white px-4 text-[18px] text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-slate-100;
+    @apply mt-1 block w-full min-h-[52px] rounded-[10px] border border-line bg-white px-4 text-[18px] text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:bg-bg-2;
   }
-  .label {
-    @apply block text-[18px] font-medium text-ink;
-  }
-  .panel {
-    @apply rounded-xl bg-white p-5 shadow-sm;
-  }
-  .big-num {
-    @apply text-[24px] font-bold text-ink;
-  }
-  .muted {
-    @apply text-[16px] text-ink-2;
-  }
+  .label { @apply block text-[18px] font-medium text-ink; }
+  .panel { @apply rounded-[14px] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,.04)]; }
+  .muted { @apply text-[16px] text-ink-2; }
   .tag-ok { @apply rounded-md bg-ok-soft px-2 py-0.5 text-[16px] font-medium text-ok; }
   .tag-warn { @apply rounded-md bg-warn-soft px-2 py-0.5 text-[16px] font-medium text-warn; }
   .tag-bad { @apply rounded-md bg-bad-soft px-2 py-0.5 text-[16px] font-medium text-bad; }
+  .tag-info { @apply rounded-md bg-brand-soft px-2 py-0.5 text-[16px] font-medium text-brand-deep; }
 }

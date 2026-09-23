@@ -5,6 +5,13 @@
 
 > 本文件是技術設計，不代表功能已完成。凡與 PRD 衝突處以 PRD 為準；本文件新增的「技術決策」若涉及產品行為，列於 §10 待確認事項，未經確認前視為預設方案。
 
+> **v0.2 變更（2026-09-23，已實作）**：後端由 Express + Prisma + SQLite 改為 **Cloudflare Workers + Hono + 單一 Durable Object（SQLite storage）**，前端與 API 同一個 Worker 部署。
+> - 交易：`ctx.storage.transactionSync()`（同步、原子）；並發：DO 單執行緒，所有 `/api/*` 請求經同一個 DO（`idFromName("main")`）→ §5.4 的 mutex 不再需要。
+> - 認證：新增「裝置配對（同步碼）」閘門 `POST /api/pair`（secret 存 Worker secret `SYNC_SECRET`，8 次失敗／15 分鐘節流，HttpOnly cookie 90 天），之後才可帳號登入；JWT 改由 `hono/jwt` 簽發；密碼改 PBKDF2-SHA256（WebCrypto）。
+> - 測試：`@cloudflare/vitest-pool-workers`，每個測試獨立 DO 儲存（自動 seed）。
+> - 以下 §1–§9 的 Prisma／Express 內容為 v0.1 設計紀錄；API 契約、錯誤碼、業務規則不變。
+
+
 ---
 
 ## 1. 技術選型與評估
