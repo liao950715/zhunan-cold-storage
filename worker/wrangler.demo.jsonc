@@ -14,9 +14,9 @@
     "bindings": [{ "name": "WAREHOUSE", "class_name": "WarehouseDO" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WarehouseDO"] }],
-  "vars": { "DEMO_MODE": "rich" },
+  "vars": { "DEMO_MODE": "rich", "PAIRING": "off" },
   // 每天台灣時間 03:00（UTC 19:00）重置成示範資料
   "triggers": { "crons": ["0 19 * * *"] },
   "observability": { "enabled": true }
-  // secrets：JWT_SECRET、SYNC_SECRET（示範站同步碼公開寫在 README）
+  // secrets：JWT_SECRET（示範站不需同步碼）
 }

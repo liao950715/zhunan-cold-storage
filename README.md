@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | 線上示範站 | [zhunan-cold-storage-demo.liao950715.workers.dev](https://zhunan-cold-storage-demo.liao950715.workers.dev/) — 歡迎隨意操作，**每天 03:00（台灣時間）自動重置**為示範資料 |
-| 示範站登入 | 第一次開啟輸入同步碼 `DEMO-ZHUNAN-2026` → 帳號 `admin` / `admin1234`（管理員）或 `staff` / `staff1234`（工作人員） |
+| 示範站登入 | 不需同步碼，直接登入：`admin` / `admin1234`（管理員）或 `staff` / `staff1234`（工作人員） |
 | GitHub | [github.com/liao950715/zhunan-cold-storage](https://github.com/liao950715/zhunan-cold-storage) |
 
 - 需求：[docs/PRD.md](docs/PRD.md)、[docs/REQUIREMENTS_DECISIONS.md](docs/REQUIREMENTS_DECISIONS.md)
@@ -45,10 +45,9 @@ npm run deploy     # build web → wrangler deploy
 
 ### 示範站（每日自動重置）
 
-`worker/wrangler.demo.jsonc` 是第二個 Worker（`zhunan-cold-storage-demo`）：`DEMO_MODE=rich` 讓 seed 填滿大部分儲位（多批次、快到期、已過期），並以 Cron（`0 19 * * *` UTC＝台灣 03:00）呼叫 Durable Object 的 `resetFromCron()` 重置成初始資料。
+`worker/wrangler.demo.jsonc` 是第二個 Worker（`zhunan-cold-storage-demo`）：`PAIRING=off` 免同步碼配對、`DEMO_MODE=rich` 讓 seed 填滿大部分儲位（多批次、快到期、已過期），並以 Cron（`0 19 * * *` UTC＝台灣 03:00）呼叫 Durable Object 的 `resetFromCron()` 重置成初始資料。
 
 ```bash
 npx wrangler secret put JWT_SECRET -c worker/wrangler.demo.jsonc
-npx wrangler secret put SYNC_SECRET -c worker/wrangler.demo.jsonc   # 示範站同步碼可公開
 npm run deploy:demo
 ```

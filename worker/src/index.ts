@@ -15,6 +15,8 @@ export interface Env {
   SYNC_SECRET?: string;
   /** "rich"＝示範站：填滿的示範資料；配合 Cron 每天重置 */
   DEMO_MODE?: string;
+  /** "off"＝不需同步碼配對（示範站） */
+  PAIRING?: string;
 }
 
 export class WarehouseDO extends DurableObject<Env> {
@@ -48,6 +50,7 @@ export class WarehouseDO extends DurableObject<Env> {
         db,
         jwtSecret: env.JWT_SECRET || "dev-only-secret-change-me",
         syncSecret: (env.SYNC_SECRET || "").trim(),
+        pairingDisabled: env.PAIRING === "off",
         resetDemo: () => resetDemo(),
       });
       this.resetDemoFn = resetDemo;

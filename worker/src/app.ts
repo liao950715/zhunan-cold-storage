@@ -13,7 +13,7 @@ import * as q from "./services/queryService.js";
 import * as stock from "./services/stockService.js";
 import { deleteLocation, deleteRack, saveLayout } from "./services/layoutService.js";
 
-export interface AppEnv { db: Db; jwtSecret: string; syncSecret: string; resetDemo: () => Promise<{ ok: true }> }
+export interface AppEnv { db: Db; jwtSecret: string; syncSecret: string; /** 示範站：不需同步碼配對 */ pairingDisabled?: boolean; resetDemo: () => Promise<{ ok: true }> }
 type Role = "ADMIN" | "STAFF";
 interface AuthUser { id: number; username: string; displayName: string; role: Role }
 type Vars = { user: AuthUser };
@@ -55,6 +55,7 @@ export function createApp(env: AppEnv) {
   const pairToken = (secret: string) => sha256Hex(`pair:${secret}`);
 
   app.get("/api/pair", async (c) => {
+    if (env.pairingDisabled) return c.json({ paired: true, configured: true });
     const cookie = getCookie(c, PAIR_COOKIE);
     const paired = !!cookie && timingSafeEqual(cookie, await pairToken(env.syncSecret));
     return c.json({ paired, configured: env.syncSecret.length >= 16 });
@@ -85,7 +86,7 @@ export function createApp(env: AppEnv) {
 
   // 配對閘門：除 health／pair 外都要先配對
   app.use("/api/*", async (c, next) => {
-    if (c.req.path === "/api/health" || c.req.path === "/api/pair") return next();
+    if (env.pairingDisabled || c.req.path === "/api/health" || c.req.path === "/api/pair") return next();
     const cookie = getCookie(c, PAIR_COOKIE);
     if (!cookie || !timingSafeEqual(cookie, await pairToken(env.syncSecret))) throw new AppError("NOT_PAIRED", 401, "此裝置尚未配對，請先輸入同步碼");
     return next();
