@@ -2,14 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { get } from "../api/client";
 import type { Dashboard as DashboardData } from "../api/types";
-import { Card, Collapsible, PageTitle, fmtDate } from "../components/ui";
+import { Card, Collapsible, PageTitle, QueryState, fmtDate } from "../components/ui";
 import { InboundIcon, OutboundIcon, SearchIcon } from "../components/icons";
 import SearchBox from "../components/SearchBox";
 
 /** 首頁：1 找貨 → 2 入庫／出庫 → 3 需要處理 → 4 庫存概況。 */
 export default function Dashboard() {
   const nav = useNavigate();
-  const d = useQuery({ queryKey: ["dashboard"], queryFn: () => get<DashboardData>("/dashboard") }).data;
+  const dq = useQuery({ queryKey: ["dashboard"], queryFn: () => get<DashboardData>("/dashboard") });
+  const d = dq.data;
 
   const expired = d?.expiryAlerts.filter((a) => a.expired) ?? [];
   const expiring = d?.expiryAlerts.filter((a) => !a.expired) ?? [];
@@ -29,7 +30,7 @@ export default function Dashboard() {
 
       <Card title={`需要處理（${todo}）`}>
         {!d ? (
-          <p className="muted">載入中…</p>
+          <QueryState q={dq} what="需要處理的事情" />
         ) : todo === 0 ? (
           <p className="text-[18px] text-ok">目前沒有需要處理的事情。</p>
         ) : (

@@ -10,6 +10,14 @@ import { todayString } from "../lib/dates.js";
 export interface Ctx {
   operator: { id: number };
   idempotencyKey?: string;
+  /** 請求內容指紋（路徑＋標準化 body）；同 key 不同內容 → 拒絕，不回放舊結果 */
+  requestFingerprint?: string;
+}
+
+/** 標準化 JSON（鍵排序），讓同樣內容產生同樣指紋。 */
+export function requestFingerprint(path: string, body: unknown): string {
+  const canon = (v: unknown): unknown => Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v as object).sort().map((k) => [k, canon((v as Record<string, unknown>)[k])])) : v;
+  return `${path}|${JSON.stringify(canon(body))}`;
 }
 type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT" | "REVERSAL";
 interface ProductRow { id: number; name: string; unit: string; status: string }
@@ -107,14 +115,17 @@ function createMovement(db: Db, operatorId: number, m: MovementInput) {
 function runStockTx<T>(db: Db, ctx: Ctx, fn: () => T): T {
   return db.tx(() => {
     if (ctx.idempotencyKey) {
-      const seen = db.one<{ userId: number; responseJson: string }>("SELECT userId, responseJson FROM IdempotencyKey WHERE key = ?", ctx.idempotencyKey);
+      const seen = db.one<{ userId: number; requestFingerprint: string | null; responseJson: string }>("SELECT userId, requestFingerprint, responseJson FROM IdempotencyKey WHERE key = ?", ctx.idempotencyKey);
       if (seen) {
         if (seen.userId !== ctx.operator.id) throw new AppError("DUPLICATE_REQUEST", 409, "此請求識別碼已被使用");
+        if (seen.requestFingerprint && ctx.requestFingerprint && seen.requestFingerprint !== ctx.requestFingerprint) {
+          throw new AppError("IDEMPOTENCY_MISMATCH", 409, "上一次送出其實已經成功，但這次內容不同，系統沒有再執行。請先到「異動紀錄」核對上一筆，確認後再重新操作。");
+        }
         return JSON.parse(seen.responseJson) as T;
       }
     }
     const result = fn();
-    if (ctx.idempotencyKey) db.run("INSERT INTO IdempotencyKey (key, userId, responseJson) VALUES (?, ?, ?)", ctx.idempotencyKey, ctx.operator.id, JSON.stringify(result));
+    if (ctx.idempotencyKey) db.run("INSERT INTO IdempotencyKey (key, userId, requestFingerprint, responseJson) VALUES (?, ?, ?, ?)", ctx.idempotencyKey, ctx.operator.id, ctx.requestFingerprint ?? null, JSON.stringify(result));
     return result;
   });
 }
@@ -248,6 +259,10 @@ export function approveStocktake(db: Db, stocktakeId: number, reviewNote: string
     for (const item of items) {
       if (item.diff === 0) continue;
       const label = `批次 ${item.batchNo} 於儲位 ${item.locationCode}`;
+      if (item.diff > 0) {
+        const product = db.one<{ id: number; name: string; unit: string }>("SELECT id, name, unit FROM Product WHERE id = ?", item.productId)!;
+        ensureCanAdd(db, item.locationId, product, item.diff); // 盤點加回也要守容量與單一商品（審查 #1）
+      }
       const r = item.diff > 0 ? addInventory(db, item.batchId, item.locationId, item.diff) : removeInventory(db, item.batchId, item.locationId, -item.diff, label);
       const side = { locationId: item.locationId, code: item.locationCode, ...r };
       movementIds.push(createMovement(db, ctx.operator.id, { type: "ADJUSTMENT", productId: item.productId, productName: item.productName, batchId: item.batchId, quantity: Math.abs(item.diff), ...(item.diff > 0 ? { to: side } : { from: side }), reason: `盤點 #${st.id} 核准調整（實盤 ${item.countedQty}）${reviewNote ? "：" + reviewNote : ""}`, referenceType: "STOCKTAKE", referenceId: st.id }));
@@ -268,6 +283,18 @@ export function rejectStocktake(db: Db, stocktakeId: number, reviewNote: string 
 // ---------- 容量設定（FR-007） ----------
 
 export interface CapacityInput { defaultCapacity?: number | null; items?: Array<{ productId: number; capacity: number }> }
+
+/** 布局編輯改 defaultCapacity 時共用同一條規則：低於目前占用就拒絕（審查 #4）。 */
+export function ensureDefaultCapacityAllowed(db: Db, locationId: number, defaultCapacity: number | null) {
+  if (defaultCapacity === null) return;
+  const state = locationState(db, locationId);
+  if (state.currentProductId === null) return;
+  const specific = db.one("SELECT 1 FROM LocationCapacity WHERE locationId = ? AND productId = ?", locationId, state.currentProductId);
+  if (!specific && defaultCapacity < state.occupied) {
+    const loc = db.one<{ code: string }>("SELECT code FROM Location WHERE id = ?", locationId)!;
+    throw new AppError("CAPACITY_BELOW_OCCUPIED", 409, `無法儲存：儲位 ${loc.code} 目前存放「${state.currentProductName}」${state.occupied}，容量不可設為 ${defaultCapacity}。請先搬移或出庫。`, { occupied: state.occupied, capacity: defaultCapacity });
+  }
+}
 
 /** 修改容量低於目前占用 → 拒絕（Q3 預設）。 */
 export function setCapacities(db: Db, locationId: number, input: CapacityInput, ctx: Ctx) {

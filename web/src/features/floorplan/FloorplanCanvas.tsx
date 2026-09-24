@@ -3,6 +3,7 @@ import { Group, Layer, Rect, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import type { DraftRack, WarehouseLayout } from "../../api/types";
 import { clampRect } from "./geometry";
+import LocationList from "./LocationList";
 
 export interface CanvasProps {
   layout: WarehouseLayout;
@@ -22,6 +23,13 @@ export interface CanvasProps {
 }
 
 const HANDLE_H = 28;
+const VIEW_KEY = "zn-map-view";
+type View = "map" | "list";
+/** 手機（<768px）預設列表，電腦預設平面圖；使用者切換過就記住。 */
+function initialView(): View {
+  try { const v = localStorage.getItem(VIEW_KEY); if (v === "map" || v === "list") return v; } catch { /* ignore */ }
+  return typeof window !== "undefined" && window.innerWidth < 768 ? "list" : "map";
+}
 
 /**
  * 儲位配色（依需求指定）：點選中 > 搜尋結果 > 庫存狀態；每格永遠有「已滿／有貨／空位」文字。
@@ -46,22 +54,39 @@ export function cellState(loc: { occupied?: boolean; quantity?: number; capacity
 
 export default function FloorplanCanvas(p: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.5);
+  const [fitScale, setFitScale] = useState(0.5);
+  const [zoom, setZoom] = useState(1); // 使用者放大倍率（1＝剛好塞進寬度，最小 0.55 起算）
+  const [view, setView] = useState<View>(() => (p.editing ? "map" : initialView()));
+  const scale = fitScale * zoom;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     // 手機太窄時不再縮小（字會看不清），改成可左右滑動
-    const fit = () => setScale(Math.max(0.55, Math.min(1.6, (el.clientWidth - 2) / p.layout.width)));
+    const fit = () => setFitScale(Math.max(0.55, Math.min(1.6, (el.clientWidth - 2) / p.layout.width)));
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [p.layout.width]);
+  }, [p.layout.width, view]);
 
   const W = p.layout.width;
   const H = p.layout.height;
-  const fs = (n: number) => (p.compact ? Math.round(n * 0.82) : n);
+  // 手機縮到 0.55 時 22px 只剩 12px：放大倍率會把字一起放大；compact 只在電腦寬度才縮字
+  const fs = (n: number) => (p.compact && scale >= 0.9 ? Math.round(n * 0.82) : n);
+
+  const focusCode = p.selectedLocation ?? Object.keys(p.marks ?? {})[0] ?? [...p.highlightCodes][0] ?? null;
+  /** 把選取／標示的格子捲到可見範圍中央（放大後才需要） */
+  function scrollToFocus(code = focusCode) {
+    const el = containerRef.current;
+    if (!el || !code) return;
+    for (const r of p.racks) for (const l of r.locations) if (l.code === code) {
+      el.scrollTo({ left: Math.max(0, (r.x + l.x + l.width / 2) * scale - el.clientWidth / 2), top: Math.max(0, (r.y + l.y + l.height / 2) * scale - el.clientHeight / 2), behavior: "smooth" });
+      return;
+    }
+  }
+  useEffect(() => { if (zoom > 1) scrollToFocus(); }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  const changeView = (v: View) => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ } };
 
   function moveRack(key: string, x: number, y: number) {
     p.onRacksChange(p.racks.map((r) => (r.key === key ? { ...r, ...clampRect({ x, y, width: r.width, height: r.height }, W, H) } : r)));
@@ -71,8 +96,38 @@ export default function FloorplanCanvas(p: CanvasProps) {
   }
   const clearSel = () => { p.onSelectLocation(null); p.onSelectRack(null); };
 
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      {!p.editing && (
+        <div className="flex overflow-hidden rounded-[10px] border border-line" role="group" aria-label="顯示方式">
+          <button type="button" onClick={() => changeView("list")} aria-pressed={view === "list"} className={`min-h-[44px] px-4 text-[17px] font-medium ${view === "list" ? "bg-brand-dark text-white" : "bg-white hover:bg-brand-soft"}`}>大字列表</button>
+          <button type="button" onClick={() => changeView("map")} aria-pressed={view === "map"} className={`min-h-[44px] px-4 text-[17px] font-medium ${view === "map" ? "bg-brand-dark text-white" : "bg-white hover:bg-brand-soft"}`}>平面圖</button>
+        </div>
+      )}
+      {view === "map" && (
+        <div className="flex items-center gap-1" role="group" aria-label="平面圖縮放">
+          <button type="button" className="btn-sm min-w-[44px]" onClick={() => setZoom((z) => Math.min(3, +(z + 0.5).toFixed(2)))} aria-label="放大平面圖">放大 ＋</button>
+          <button type="button" className="btn-sm min-w-[44px]" onClick={() => setZoom((z) => Math.max(1, +(z - 0.5).toFixed(2)))} disabled={zoom <= 1} aria-label="縮小平面圖">縮小 －</button>
+          {focusCode && <button type="button" className="btn-sm" onClick={() => scrollToFocus()}>回到 {focusCode}</button>}
+          {zoom > 1 && <span className="muted">已放大 {zoom} 倍，可拖曳／滑動看其他區域</span>}
+        </div>
+      )}
+    </div>
+  );
+
+  if (view === "list" && !p.editing) {
+    return (
+      <div className="space-y-3">
+        {toolbar}
+        <LocationList racks={p.racks} selectedLocation={p.selectedLocation} highlightCodes={p.highlightCodes} highlightLabel={p.highlightLabel} marks={p.marks} onSelectLocation={p.onSelectLocation} />
+      </div>
+    );
+  }
+
   return (
-    <div ref={containerRef} className={`w-full overflow-x-auto overflow-y-hidden rounded-[14px] bg-white ${p.editing ? "border-2 border-dashed border-brand" : "border border-line"}`}>
+    <div className="space-y-2">
+    {toolbar}
+    <div ref={containerRef} className={`w-full overflow-auto rounded-[14px] bg-white ${zoom > 1 ? "max-h-[70vh]" : "overflow-y-hidden"} ${p.editing ? "border-2 border-dashed border-brand" : "border border-line"}`}>
       <Stage width={W * scale} height={H * scale} scaleX={scale} scaleY={scale}
         onClick={(e) => { if (e.target === e.target.getStage()) clearSel(); }}
         onTap={(e) => { if (e.target === e.target.getStage()) clearSel(); }}>
@@ -140,6 +195,7 @@ export default function FloorplanCanvas(p: CanvasProps) {
           })}
         </Layer>
       </Stage>
+    </div>
     </div>
   );
 }

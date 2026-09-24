@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { errorMessage, isNetworkError } from "../api/client";
 
 export function Card({ title, children, actions, className = "" }: { title?: ReactNode; children: ReactNode; actions?: ReactNode; className?: string }) {
   return (
@@ -23,6 +24,21 @@ export function Message({ kind, children }: { kind: "ok" | "error" | "warn"; chi
       <b className="mr-2">{label}：</b>{children}
     </div>
   );
+}
+
+/** 查詢狀態：載入中／連不到伺服器／伺服器錯誤，錯誤都附「重試」。有資料時回 null（由呼叫端顯示內容）。 */
+export function QueryState({ q, what = "資料" }: { q: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown }; what?: string }) {
+  if (q.isPending) return <p className="text-[18px] text-ink-2">正在讀取{what}…</p>;
+  if (q.isError) {
+    const net = isNetworkError(q.error);
+    return (
+      <div role="alert" className="rounded-lg bg-bad-soft px-4 py-3 text-[18px] text-bad">
+        <b className="mr-2">{net ? "連不到伺服器：" : "讀取失敗："}</b>{net ? "請確認網路或訊號後再試。" : errorMessage(q.error)}
+        <button type="button" className="btn-sm ml-3 align-middle" onClick={() => q.refetch()}>重試</button>
+      </div>
+    );
+  }
+  return null;
 }
 
 /** 欄位名稱固定在輸入框上方。 */

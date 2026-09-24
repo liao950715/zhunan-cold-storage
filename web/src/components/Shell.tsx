@@ -23,6 +23,17 @@ const ADMIN: Item[] = [
   { to: "/settings", label: "系統設定", icon: SettingsIcon, adminOnly: true },
 ];
 
+/** 瀏覽器回報的連線狀態（斷線時頂端顯示紅色橫幅） */
+function useOnline() {
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false);
+    window.addEventListener("online", on); window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  return online;
+}
+
 const LARGE_KEY = "zn-large-text";
 function useLargeText() {
   const [large, setLarge] = useState(() => { try { return localStorage.getItem(LARGE_KEY) === "1"; } catch { return false; } });
@@ -38,13 +49,28 @@ function useLargeText() {
  * 手機／平板：主選單 4 格一列（不橫向捲動），「其他作業」展開成格子。
  */
 export default function Shell() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, offline, retry, logout } = useAuth();
+  const online = useOnline();
   const loc = useLocation();
   const inMore = [...MORE, ...ADMIN].some((m) => loc.pathname.startsWith(m.to));
   const [moreOpen, setMoreOpen] = useState(inMore);
   const [large, setLarge] = useLargeText();
   useEffect(() => { if (inMore) setMoreOpen(true); }, [inMore]);
-  if (loading) return <div className="p-6 text-ink-2">載入中…</div>;
+  // 手機：選好作業後把「其他」格子收起來，首屏留給表單（電腦側欄不受影響）
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  useEffect(() => { setMobileMoreOpen(false); }, [loc.pathname]);
+  if (loading) return <div className="p-6 text-[20px] text-ink-2">載入中…</div>;
+  if (offline) {
+    return (
+      <div className="mx-auto max-w-md p-6">
+        <div role="alert" className="panel space-y-4 border-l-8 border-bad">
+          <p className="text-[24px] font-bold text-bad">連不到伺服器</p>
+          <p className="text-[18px]">請確認手機或電腦有網路、訊號正常，再按「重試」。這不是帳號或密碼的問題。</p>
+          <button type="button" className="btn-primary w-full" onClick={retry}>重試</button>
+        </div>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />;
 
   const link = (i: Item, mobile = false) => (
@@ -65,6 +91,9 @@ export default function Shell() {
 
   return (
     <div className="min-h-screen bg-bg text-ink lg:grid lg:grid-cols-[240px_1fr]">
+      {!online && (
+        <div role="alert" className="sticky top-0 z-40 bg-bad px-4 py-3 text-center text-[18px] font-bold text-white lg:col-span-2">目前沒有網路連線：畫面上的資料可能不是最新的，送出會失敗；恢復連線後再試。</div>
+      )}
       {/* 電腦版側欄 */}
       <aside className="hidden border-r border-line bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
         <div className="px-5 py-5"><span className="text-[20px] font-bold">竹南冷凍倉儲</span></div>
@@ -100,11 +129,11 @@ export default function Shell() {
           </div>
           <nav className="grid grid-cols-5 gap-1 px-2 pb-2" aria-label="主選單">
             {MAIN.map((i) => link(i, true))}
-            <button type="button" onClick={() => setMoreOpen(!moreOpen)} aria-expanded={moreOpen} className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-[10px] px-1 text-[16px] font-medium ${moreOpen ? "bg-bg-2" : ""} text-ink`}>
+            <button type="button" onClick={() => setMobileMoreOpen(!mobileMoreOpen)} aria-expanded={mobileMoreOpen} className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-[10px] px-1 text-[16px] font-medium ${mobileMoreOpen || inMore ? "bg-bg-2" : ""} text-ink`}>
               <MenuIcon size={24} className="text-ink-2" />其他
             </button>
           </nav>
-          {moreOpen && (
+          {mobileMoreOpen && (
             <nav className="grid grid-cols-3 gap-1 border-t border-line px-2 py-2 sm:grid-cols-4" aria-label="其他作業">
               {[...MORE, ...admins].map((i) => link(i, true))}
             </nav>

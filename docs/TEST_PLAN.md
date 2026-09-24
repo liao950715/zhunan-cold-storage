@@ -95,6 +95,11 @@
 | I-6 | 密碼不明文 | DB 中 passwordHash 以 `$2` 開頭且 ≠ 明文（NFR-10） |
 | I-7 | 布局不改庫存 | PUT layout 前後 Inventory 雜湊相同 |
 | I-8 | 單位不合計 | dashboard 回傳依單位分組，不出現跨單位總和 |
+| I-10 | 盤點核准守容量 | 容量 20、目前 20、實盤 25 → 核准 409 CAPACITY_EXCEEDED，庫存與盤點單狀態不變（審查 2026-09-24 #1） |
+| I-11 | 盤點不混放 | 儲位已放 A 商品，提交盤入 B 商品批次 → 409；提交時合法、核准前被放入他商品 → 核准 409 |
+| I-12 | 盤點基準綁畫面 | 提交時帶 systemQty；清點期間庫存變動 → 409 STOCKTAKE_BASELINE_CHANGED（審查 #2） |
+| I-13 | 布局編輯容量守占用 | PUT layout 把 defaultCapacity 改到低於現有庫存 → 409，位置與版本一併回滾（審查 #4） |
+| I-14 | 防重送綁內容 | 同 Idempotency-Key 不同 payload → 409 IDEMPOTENCY_MISMATCH 不扣庫存；相同 payload 才回放（審查 #5） |
 | I-9 | 示範站種子與 Cron 重置 | DO RPC `resetFromCron("rich")` 後：42 儲位中 37 有貨、5 空位固定；每格 ≤ 容量、一儲位一商品；26 批次含已過期 |
 
 ---
@@ -133,9 +138,9 @@ npm run test:e2e            # Playwright（需先 npm run dev 或由 config webS
 
 | 層級 | 指令 | 結果 |
 |---|---|---|
-| API／整合（Workers pool，每測試獨立 DO 儲存） | `npm run test:worker` | **56 項通過**（2026-09-24 含 FR-020 復原 10 項、I-9 示範站種子）：AT-01～07、09、11～17、19～25；I-1（DB CHECK）、I-3（Idempotency）、I-4（並發 20 筆恰好 10 成功）、I-5、I-6、I-7、I-8；配對節流；展示重置權限 |
+| API／整合（Workers pool，每測試獨立 DO 儲存） | `npm run test:worker` | **61 項通過**（2026-09-24 含 FR-020 復原 10 項、I-9 示範站種子、I-10～I-14 審查修正）：AT-01～07、09、11～17、19～25；I-1（DB CHECK）、I-3（Idempotency）、I-4（並發 20 筆恰好 10 成功）、I-5、I-6、I-7、I-8；配對節流；展示重置權限 |
 | 前端單元 | `npm run test -w web` | 5 項通過（平面圖幾何） |
-| E2E（Playwright，桌機 1440＋手機 Pixel 5） | `npm run test:e2e` | **10 項通過**：整合情境 30→5→10→3＝17（含 AT-04 即時提示、AT-08 重新整理）、AT-09／10 搜尋定位、AT-15／16／17／18 平面圖、AT-21～24 盤點權限、NFR-02 手機無橫向溢出 |
+| E2E（Playwright，桌機 1440＋手機 Pixel 5） | `npm run test:e2e` | **13 項通過**（2026-09-24：手機盤點卡片、手機搬移大字列表、7 頁不橫向溢出）；：整合情境 30→5→10→3＝17（含 AT-04 即時提示、AT-08 重新整理）、AT-09／10 搜尋定位、AT-15／16／17／18 平面圖、AT-21～24 盤點權限、NFR-02 手機無橫向溢出 |
 | 人工驗證 | `docs/MANUAL_VERIFICATION.md` | 待組員填寫（含手機／平板實機） |
 
 未自動化、以人工驗證為主：NFR-01 繁中、NFR-02 實機觸控、AT-14 圖上點擊混放提示（有單元層 API 測試）。

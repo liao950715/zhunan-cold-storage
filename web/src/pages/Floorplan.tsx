@@ -7,7 +7,7 @@ import FloorplanCanvas, { CELL_COLORS } from "../features/floorplan/FloorplanCan
 import LocationSelect from "../components/LocationSelect";
 import LocationPanel from "../features/floorplan/LocationPanel";
 import { useDialog } from "../components/ConfirmDialog";
-import { Field, Message, PageTitle } from "../components/ui";
+import { Field, Message, PageTitle, QueryState } from "../components/ui";
 import { defaultLocations, findRackOverlaps, nextLocationCode, nextRackCode, toDraft, toPayload } from "../features/floorplan/geometry";
 
 /**
@@ -128,7 +128,8 @@ export default function Floorplan() {
   };
   const patchRack = (patch: Partial<Pick<DraftRack, "label" | "width" | "height">>) => { if (selectedRack) setDraft(draft.map((r) => (r.key !== selectedRack.key ? r : { ...r, ...patch }))); };
 
-  if (warehouses.isLoading || !wh) return <p className="text-ink-2">載入中…</p>;
+  if (warehouses.isError) return <QueryState q={warehouses} what="冷凍庫" />;
+  if (warehouses.isLoading || !wh) return <p className="text-[18px] text-ink-2">正在讀取冷凍庫…</p>;
 
   return (
     <div className="space-y-4">
@@ -177,7 +178,7 @@ export default function Floorplan() {
           {layout.data ? (
             <FloorplanCanvas layout={layout.data} racks={racks} editing={editing} selectedLocation={selectedLocation} selectedRackKey={selectedRackKey} highlightCodes={highlightCodes} onSelectLocation={setSelectedLocation} onSelectRack={setSelectedRackKey} onRacksChange={setDraft} />
           ) : (
-            <p className="text-ink-2">載入平面圖…</p>
+            <QueryState q={layout} what="平面圖" />
           )}
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-[16px] text-ink" aria-label="圖例">
             {([["empty", "空位"], ["occupied", "有貨"], ["full", "已滿（依設定的容量）"], ["selected", "點選中"]] as const).map(([k, label]) => (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
@@ -30,6 +30,18 @@ export default function Transfer() {
   const [hint, setHint] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  // 選好起點 → 帶到數量欄；選好終點 → 帶到確認區；要選終點 → 帶到圖／列表（不用自己找下一步在哪）
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (phase === "batch") { qtyRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); qtyRef.current?.focus({ preventScroll: true }); }
+      if (phase === "confirm") { confirmRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); confirmRef.current?.querySelector<HTMLButtonElement>("button.btn-primary")?.focus({ preventScroll: true }); }
+      if (phase === "to") mapRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [phase, fromId, toId]);
 
   const fromLoc = all.data?.find((l) => l.id === fromId) ?? null;
   const toLoc = all.data?.find((l) => l.id === toId) ?? null;
@@ -95,9 +107,9 @@ export default function Transfer() {
   }
 
   const stepText: Record<Phase, string> = {
-    from: "請在圖上點選「從哪裡搬出」（要有貨的位置）",
+    from: "請在下方列表或平面圖點選「從哪裡搬出」（要有貨的位置）",
     batch: "填好要搬的批次和數量，再按「下一步：選搬到哪裡」",
-    to: "現在請在圖上點選「搬到哪裡」",
+    to: "現在請在下方列表或平面圖點選「搬到哪裡」",
     confirm: "請核對下方摘要，按「確認搬移」才會執行",
   };
 
@@ -106,36 +118,38 @@ export default function Transfer() {
       <PageTitle sub="把同一批貨的一部分，從一個儲位搬到另一個儲位；商品總量不變">搬移貨物</PageTitle>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
 
-      {/* 起點／終點摘要：永遠看得到 */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className={`rounded-[14px] p-4 ${fromLoc ? "bg-[#5a8199] text-white" : "border-2 border-dashed border-line bg-white"}`}>
-          <p className="text-[18px] font-bold">① 從這裡搬出</p>
+      {/* 目前步驟：釘在最上方 */}
+      <StepBanner>{stepText[phase]}</StepBanner>
+
+      {/* 起點／終點摘要：手機也兩格並排、精簡一行，不佔掉整個首屏 */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <div className={`rounded-[14px] p-3 sm:p-4 ${fromLoc ? "bg-[#5a8199] text-white" : "border-2 border-dashed border-line bg-white"}`}>
+          <p className="text-[16px] font-bold sm:text-[18px]">① 從這裡搬出</p>
           {fromLoc ? (
             <>
-              <p className="text-[26px] font-bold">{fromLoc.code}</p>
-              <p className="text-[18px]">{locationWords(fromLoc.code)}・{fromLoc.product?.name}，目前 {fromLoc.quantity} {fromLoc.product?.unit}</p>
-              <button type="button" className="btn-sm mt-2 text-ink" onClick={changeFrom}>更換搬出位置</button>
+              <p className="text-[24px] font-bold sm:text-[26px]">{fromLoc.code}</p>
+              <p className="hidden text-[18px] sm:block">{locationWords(fromLoc.code)}・{fromLoc.product?.name}，目前 {fromLoc.quantity} {fromLoc.product?.unit}</p>
+              <p className="text-[16px] sm:hidden">{fromLoc.product?.name} {fromLoc.quantity} {fromLoc.product?.unit}</p>
+              <button type="button" className="btn-sm mt-2 text-ink" onClick={changeFrom}>更換</button>
             </>
           ) : (
-            <p className="text-[20px] text-ink-2">尚未選擇</p>
+            <p className="text-[18px] text-ink-2 sm:text-[20px]">尚未選擇</p>
           )}
         </div>
-        <div className={`rounded-[14px] p-4 ${toLoc ? "border-4 border-[#754000] bg-[#ffb454] text-[#2b2118]" : "border-2 border-dashed border-line bg-white"}`}>
-          <p className="text-[18px] font-bold">② 搬到這裡</p>
+        <div className={`rounded-[14px] p-3 sm:p-4 ${toLoc ? "border-4 border-[#754000] bg-[#ffb454] text-[#2b2118]" : "border-2 border-dashed border-line bg-white"}`}>
+          <p className="text-[16px] font-bold sm:text-[18px]">② 搬到這裡</p>
           {toLoc ? (
             <>
-              <p className="text-[26px] font-bold">{toLoc.code}</p>
-              <p className="text-[18px]">{locationWords(toLoc.code)}・{toLoc.occupied ? `有 ${toLoc.product?.name} ${toLoc.quantity} ${toLoc.product?.unit}` : "空位"}</p>
-              <button type="button" className="btn-sm mt-2 border-[#754000] text-ink" onClick={changeTo}>更換搬到位置</button>
+              <p className="text-[24px] font-bold sm:text-[26px]">{toLoc.code}</p>
+              <p className="hidden text-[18px] sm:block">{locationWords(toLoc.code)}・{toLoc.occupied ? `有 ${toLoc.product?.name} ${toLoc.quantity} ${toLoc.product?.unit}` : "空位"}</p>
+              <p className="text-[16px] sm:hidden">{toLoc.occupied ? `${toLoc.product?.name} ${toLoc.quantity} ${toLoc.product?.unit}` : "空位"}</p>
+              <button type="button" className="btn-sm mt-2 border-[#754000] text-ink" onClick={changeTo}>更換</button>
             </>
           ) : (
-            <p className="text-[20px] text-ink-2">{phase === "from" || phase === "batch" ? "請先完成搬出位置" : "尚未選擇"}</p>
+            <p className="text-[18px] text-ink-2 sm:text-[20px]">{phase === "from" || phase === "batch" ? "先選搬出位置" : "尚未選擇"}</p>
           )}
         </div>
       </div>
-
-      {/* 目前步驟 ＋ 共用平面圖 */}
-      <StepBanner>{stepText[phase]}</StepBanner>
 
       {/* 批次與數量（起點選好後） */}
       {fromLoc && from.data && (
@@ -155,7 +169,7 @@ export default function Transfer() {
           {line && (
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[18px]">搬多少：</span>
-              <input type="number" min={1} max={line.quantity} inputMode="numeric" className="input mt-0 max-w-[180px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="搬移數量" />
+              <input ref={qtyRef} type="number" min={1} max={line.quantity} inputMode="numeric" className="input mt-0 max-w-[180px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="搬移數量" />
               <span className="text-[24px] font-bold">{line.product.unit}</span>
               <span className="muted">這裡有 {line.quantity} {line.product.unit}・批次 {line.batch.batchNo}・到期 {fmtDate(line.batch.expiryDate)}</span>
             </div>
@@ -169,7 +183,7 @@ export default function Transfer() {
 
       {/* 最後確認（緊接在批次數量下方，要改數量不必往下滑） */}
       {phase === "confirm" && fromLoc && toLoc && line && (
-        <div className="panel space-y-3 border-l-8 border-[#754000]">
+        <div ref={confirmRef} className="panel space-y-3 border-l-8 border-[#754000]">
           <p className="text-[26px] font-bold">{line.product.name} {quantity} {line.product.unit}，從 {fromLoc.code} → {toLoc.code}</p>
           <p className="muted">批次 {line.batch.batchNo}・{locationWords(fromLoc.code)} → {locationWords(toLoc.code)}・商品總量不變</p>
           {!qtyOk && <p className="text-warn">請先在上面填好數量。</p>}
@@ -180,7 +194,7 @@ export default function Transfer() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div ref={mapRef} className="flex flex-wrap items-center gap-3 scroll-mt-20">
         <div className="flex overflow-hidden rounded-[10px] border border-line">
           {warehouses.data?.items.map((w) => (
             <button key={w.id} type="button" onClick={() => setWhId(w.id)} className={`min-h-[52px] px-5 text-[18px] font-medium ${w.id === activeWh ? "bg-brand-dark text-white" : "bg-white hover:bg-brand-soft"}`}>{w.name}</button>
@@ -194,6 +208,16 @@ export default function Transfer() {
         <FloorplanCanvas layout={layout.data} racks={toDraft(layout.data)} editing={false} selectedLocation={null} selectedRackKey={null} highlightCodes={new Set()} marks={marks} onSelectLocation={pick} onSelectRack={() => undefined} onRacksChange={() => undefined} />
       )}
 
+      {/* 手機：主要按鈕固定在畫面底部（避開瀏覽器工具列的安全區），選完不用往上找 */}
+      {(phase === "batch" || phase === "confirm") && fromLoc && (
+        <div className="sticky bottom-0 z-20 -mx-4 border-t border-line bg-white/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur lg:hidden">
+          {phase === "batch" ? (
+            <button type="button" className="btn-primary w-full" disabled={!qtyOk} onClick={() => setPhase("to")}>{qtyOk ? "下一步：選搬到哪裡" : "請先填好批次與數量"}</button>
+          ) : (
+            <button type="button" className="btn-primary w-full" disabled={!qtyOk || m.isPending || !toLoc} onClick={() => m.mutate()}>{m.isPending ? "搬移中…" : `確認搬移：${fromLoc.code} → ${toLoc?.code ?? "?"}`}</button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { errorMessage } from "../api/client";
 import { Field, Message } from "../components/ui";
 
 export default function Login() {
-  const { user, login } = useAuth();
+  const { user, login, expired } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const [username, setUsername] = useState("");
@@ -36,6 +36,7 @@ export default function Login() {
           <h1 className="text-[30px] font-bold">竹南冷凍倉儲</h1>
           <p className="text-[18px] text-ink-2">庫存管理系統</p>
         </div>
+        {expired && <Message kind="warn">登入已逾時（超過 12 小時）或已在別處登出，請重新登入。您剛才在畫面上填的內容需要重新輸入。</Message>}
         <Field label="帳號"><input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required /></Field>
         <Field label="密碼"><input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></Field>
         {error && <Message kind="error">{error}</Message>}

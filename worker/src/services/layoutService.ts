@@ -3,6 +3,7 @@
  */
 import type { Db } from "../lib/sql.js";
 import { AppError, notFound, validation } from "../lib/errors.js";
+import { ensureDefaultCapacityAllowed } from "./stockService.js";
 
 export interface LocationInput { id?: number; code: string; x: number; y: number; width: number; height: number; defaultCapacity?: number | null }
 export interface RackInput { id?: number; code: string; label?: string | null; x: number; y: number; width: number; height: number; rotation?: number; locations: LocationInput[] }
@@ -50,6 +51,7 @@ export function saveLayout(db: Db, warehouseId: number, input: LayoutInput) {
       for (const l of r.locations) {
         if (l.id !== undefined) {
           if (!locIds.includes(l.id)) throw validation(`儲位 id ${l.id} 不屬於貨架「${r.code}」（儲位不可跨貨架移動，請用搬移處理庫存）`);
+          ensureDefaultCapacityAllowed(db, l.id, l.defaultCapacity ?? null);
           db.run("UPDATE Location SET code = ?, x = ?, y = ?, width = ?, height = ?, defaultCapacity = ? WHERE id = ?", l.code, l.x, l.y, l.width, l.height, l.defaultCapacity ?? null, l.id);
         } else {
           if (db.one("SELECT 1 FROM Location WHERE code = ?", l.code)) throw new AppError("CONFLICT", 409, `儲位代碼「${l.code}」已存在（含已封存）`);

@@ -131,7 +131,11 @@ export function createApp(env: AppEnv) {
     if (c.get("user").role !== "ADMIN") throw new AppError("FORBIDDEN", 403, "您沒有執行此操作的權限");
     await next();
   };
-  const ctxOf = (c: { get: (k: "user") => AuthUser; req: { header: (n: string) => string | undefined } }): stock.Ctx => ({ operator: { id: c.get("user").id }, idempotencyKey: c.req.header("Idempotency-Key")?.slice(0, 128) || undefined });
+  const ctxOf = (c: { get: (k: "user") => AuthUser; req: { path: string; header: (n: string) => string | undefined } }, body?: unknown): stock.Ctx => ({
+    operator: { id: c.get("user").id },
+    idempotencyKey: c.req.header("Idempotency-Key")?.slice(0, 128) || undefined,
+    requestFingerprint: body === undefined ? undefined : stock.requestFingerprint(c.req.path, body),
+  });
 
   // ---------- 使用者（ADMIN） ----------
   const userSelect = "SELECT id, username, displayName, role, status, createdAt FROM User";
@@ -201,7 +205,7 @@ export function createApp(env: AppEnv) {
   // ---------- 庫存交易 ----------
   app.post("/api/stock/inbound", async (c) => {
     const input = z.object({ productId: id, quantity: positiveInt, expiryDate: dateString, receivedDate: dateString.optional(), note: z.string().max(500).nullable().optional(), allocations: z.array(z.object({ locationId: id, quantity: positiveInt })).min(1, "至少分配一個儲位") }).parse(await c.req.json());
-    return c.json(stock.inbound(db, input, ctxOf(c)), 201);
+    return c.json(stock.inbound(db, input, ctxOf(c, input)), 201);
   });
   app.post("/api/stock/outbound/suggest", async (c) => {
     const { productId, quantity } = z.object({ productId: id, quantity: positiveInt }).parse(await c.req.json());
@@ -209,15 +213,15 @@ export function createApp(env: AppEnv) {
   });
   app.post("/api/stock/outbound", async (c) => {
     const input = z.object({ productId: id, lines: z.array(z.object({ batchId: id, locationId: id, quantity: positiveInt })).min(1, "至少一筆出庫明細"), note: z.string().max(500).nullable().optional() }).parse(await c.req.json());
-    return c.json(stock.outbound(db, input, ctxOf(c)), 201);
+    return c.json(stock.outbound(db, input, ctxOf(c, input)), 201);
   });
   app.post("/api/stock/transfer", async (c) => {
     const input = z.object({ batchId: id, fromLocationId: id, toLocationId: id, quantity: positiveInt, note: z.string().max(500).nullable().optional() }).parse(await c.req.json());
-    return c.json(stock.transfer(db, input, ctxOf(c)), 201);
+    return c.json(stock.transfer(db, input, ctxOf(c, input)), 201);
   });
   app.post("/api/stock/damage", async (c) => {
     const input = z.object({ batchId: id, locationId: id, quantity: positiveInt, reason: z.string().trim().min(1, "請填寫報損原因").max(500) }).parse(await c.req.json());
-    return c.json(stock.damage(db, input, ctxOf(c)), 201);
+    return c.json(stock.damage(db, input, ctxOf(c, input)), 201);
   });
 
   // ---------- 異動紀錄 ----------
@@ -240,7 +244,7 @@ export function createApp(env: AppEnv) {
   app.get("/api/stocktakes", (c) => c.json(q.listStocktakes(db, z.enum(["PENDING", "APPROVED", "REJECTED"]).optional().parse(c.req.query("status")))));
   app.get("/api/stocktakes/baseline", (c) => c.json({ items: q.stocktakeBaseline(db, c.req.query("warehouseId") ? idParam(c.req.query("warehouseId")!, "warehouseId") : undefined) }));
   app.post("/api/stocktakes", async (c) => {
-    const input = z.object({ warehouseId: id.optional(), note: z.string().max(500).nullable().optional(), items: z.array(z.object({ locationId: id, batchId: id, countedQty: z.number().int().min(0) })).min(1, "至少一筆盤點明細") }).parse(await c.req.json());
+    const input = z.object({ warehouseId: id.optional(), note: z.string().max(500).nullable().optional(), items: z.array(z.object({ locationId: id, batchId: id, countedQty: z.number().int().min(0), systemQty: z.number().int().min(0).optional() })).min(1, "至少一筆盤點明細") }).parse(await c.req.json());
     return c.json(q.submitStocktake(db, input, c.get("user").id), 201);
   });
   app.get("/api/stocktakes/:id", (c) => c.json(q.getStocktake(db, idParam(c.req.param("id")))));

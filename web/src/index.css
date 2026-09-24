@@ -16,7 +16,7 @@
   --color-ink-2: #525c69;
   --color-line: #d9dee5;
   --color-brand: #5a8199;        /* 主要操作、選中色條、連結（與平面圖「點選中」同色） */
-  --color-brand-dark: #5a8199;   /* 主要按鈕（白字對比 4.6:1，用粗體 18px） */
+  --color-brand-dark: #5a8199;   /* 主要按鈕（白字對比約 4.2:1，只用於 ≥18px 粗體的大字；小字不用白字配這色） */
   --color-brand-deep: #29485c;
   --color-brand-soft: #e8f0f4;
   --color-ok: #2f5d46;

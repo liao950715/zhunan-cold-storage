@@ -192,7 +192,7 @@ export function getStocktake(db: Db, id: number) {
   return serializeStocktake(db, s);
 }
 /** 提交只建立待核准單（不改庫存）；記錄提交當下 systemQty 作核准基準（AT-24）。 */
-export function submitStocktake(db: Db, input: { warehouseId?: number; note?: string | null; items: Array<{ locationId: number; batchId: number; countedQty: number }> }, operatorId: number) {
+export function submitStocktake(db: Db, input: { warehouseId?: number; note?: string | null; items: Array<{ locationId: number; batchId: number; countedQty: number; systemQty?: number }> }, operatorId: number) {
   const keys = input.items.map((i) => `${i.locationId}:${i.batchId}`);
   if (new Set(keys).size !== keys.length) throw new AppError("VALIDATION_ERROR", 400, "同一儲位＋批次不可重複盤點");
   return db.tx(() => {
@@ -201,6 +201,19 @@ export function submitStocktake(db: Db, input: { warehouseId?: number; note?: st
       if (!db.one("SELECT 1 FROM Location WHERE id = ? AND status = 'ACTIVE'", i.locationId)) throw notFound("儲位");
       if (!db.one("SELECT 1 FROM Batch WHERE id = ?", i.batchId)) throw notFound("批次");
       const systemQty = db.one<{ quantity: number }>("SELECT quantity FROM Inventory WHERE batchId = ? AND locationId = ?", i.batchId, i.locationId)?.quantity ?? 0;
+      // 審查 #2：清點期間庫存變了（畫面上的基準 ≠ 現在），不能照單全收
+      if (i.systemQty !== undefined && i.systemQty !== systemQty) {
+        const loc = db.one<{ code: string }>("SELECT code FROM Location WHERE id = ?", i.locationId)!;
+        throw new AppError("STOCKTAKE_BASELINE_CHANGED", 409, `無法提交：儲位 ${loc.code} 在您清點期間庫存已變動（畫面 ${i.systemQty}、目前 ${systemQty}）。請重新整理後再清點這一格。`, { locationId: i.locationId, batchId: i.batchId, shown: i.systemQty, current: systemQty });
+      }
+      // 審查 #1：儲位目前放別的商品時，不可用盤點把另一商品「盤進去」
+      if (i.countedQty > 0) {
+        const other = db.one<{ name: string }>("SELECT p.name FROM Inventory inv JOIN Batch b ON b.id = inv.batchId JOIN Product p ON p.id = b.productId WHERE inv.locationId = ? AND inv.quantity > 0 AND b.productId <> (SELECT productId FROM Batch WHERE id = ?) LIMIT 1", i.locationId, i.batchId);
+        if (other) {
+          const loc = db.one<{ code: string }>("SELECT code FROM Location WHERE id = ?", i.locationId)!;
+          throw new AppError("LOCATION_PRODUCT_CONFLICT", 409, `無法提交：儲位 ${loc.code} 目前存放「${other.name}」，不可盤入不同商品。`, { locationId: i.locationId });
+        }
+      }
       db.run("INSERT INTO StocktakeItem (stocktakeId, locationId, batchId, systemQty, countedQty, diff) VALUES (?, ?, ?, ?, ?, ?)", id, i.locationId, i.batchId, systemQty, i.countedQty, i.countedQty - systemQty);
     }
     return getStocktake(db, id);

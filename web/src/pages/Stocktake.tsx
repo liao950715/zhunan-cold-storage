@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { errorMessage, get, post } from "../api/client";
 import { useInvalidateStock, useWarehouses } from "../api/hooks";
@@ -43,54 +43,52 @@ export default function Stocktake() {
       {msg && <Message kind={msg.kind}>{msg.text}</Message>}
       {tab === "new" && <NewStocktake onDone={async (id) => { await invalidate(); setTab("list"); setMsg({ kind: "ok", text: `盤點單 #${id} 已提交，等待管理員核准；正式庫存尚未變動` }); }} />}
       {tab === "list" && (
-        <Card>
-          <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[16px]">
-            <thead className="text-left text-ink-2"><tr><th className="py-1">#</th><th>狀態</th><th>範圍</th><th>提交</th><th className="text-right">明細</th><th className="text-right">差異筆數</th><th>審核</th><th></th></tr></thead>
-            <tbody>
-              {list.data?.items.map((s) => (
-                <Fragment key={s.id}>
-                  <tr className="border-t border-line">
-                    <td className="py-1.5">{s.id}</td>
-                    <td><span className={s.status === "PENDING" ? "tag-warn" : s.status === "APPROVED" ? "tag-ok" : "tag-info"}>{STATUS[s.status]}</span></td>
-                    <td>{s.warehouse?.name ?? "全部"}</td>
-                    <td className="text-xs">{s.submittedBy.displayName}<br />{fmtTime(s.submittedAt)}</td>
-                    <td className="text-right">{s.items.length}</td>
-                    <td className="text-right">{s.items.filter((i) => i.diff !== 0).length}</td>
-                    <td className="text-xs">{s.reviewedBy ? <>{s.reviewedBy.displayName}<br />{fmtTime(s.reviewedAt!)}{s.reviewNote && <><br />「{s.reviewNote}」</>}</> : "—"}</td>
-                    <td className="text-right whitespace-nowrap">
-                      <button className="text-brand-deep underline" onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "收合" : "明細"}</button>
-                      {s.status === "PENDING" && user?.role === "ADMIN" && (
-                        <>
-                          <button className="btn-sm ml-2" onClick={async () => { const note = await dialog.prompt(`核准盤點 #${s.id}：備註（可留空）`); if (note !== null) review.mutate({ id: s.id, action: "approve", note }); }}>核准</button>
-                          <button className="btn-sm ml-2 text-bad" onClick={async () => { const note = await dialog.prompt(`退回盤點 #${s.id}：原因`); if (note !== null) review.mutate({ id: s.id, action: "reject", note }); }}>退回</button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                  {open === s.id && (
-                    <tr>
-                      <td colSpan={8} className="bg-bg-2 p-3">
-                        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[16px]">
-                          <thead className="text-ink-2"><tr><th className="text-left">儲位</th><th className="text-left">商品</th><th className="text-left">批次</th><th className="text-right">系統基準</th><th className="text-right">實盤</th><th className="text-right">差異</th></tr></thead>
-                          <tbody>
-                            {s.items.map((i) => (
-                              <tr key={i.id} className={i.diff !== 0 ? "font-medium" : ""}>
-                                <td>{i.locationCode}</td><td>{i.product.name}</td><td className="font-mono">{i.batchNo}</td><td className="text-right">{i.systemQty}</td><td className="text-right">{i.countedQty}</td>
-                                <td className={`text-right ${i.diff < 0 ? "text-bad" : i.diff > 0 ? "text-ok" : "text-ink-2"}`}>{i.diff > 0 ? `+${i.diff}` : i.diff}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table></div>
-                        {s.note && <p className="mt-1 text-slate-600">備註：{s.note}</p>}
-                      </td>
-                    </tr>
+        <div className="space-y-3">
+          {list.isPending && <p className="text-[18px] text-ink-2">正在讀取盤點單…</p>}
+          {list.isError && <Message kind="error">{errorMessage(list.error)} <button type="button" className="btn-sm ml-2" onClick={() => list.refetch()}>重試</button></Message>}
+          {list.data?.items.length === 0 && <p className="panel text-[18px] text-ink-2">尚無盤點單</p>}
+          {/* 每張盤點單一張卡片：手機不用往右滑就看得到狀態、差異與按鈕 */}
+          {list.data?.items.map((s) => {
+            const diffCount = s.items.filter((i) => i.diff !== 0).length;
+            const canReview = s.status === "PENDING" && user?.role === "ADMIN";
+            return (
+              <section key={s.id} className={`panel space-y-3 ${s.status === "PENDING" ? "border-l-8 border-warn" : ""}`} aria-label={`盤點單 ${s.id}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[22px] font-bold">盤點 #{s.id}</span>
+                  <span className={s.status === "PENDING" ? "tag-warn" : s.status === "APPROVED" ? "tag-ok" : "tag-info"}>{STATUS[s.status]}</span>
+                  <span className="text-[18px] text-ink-2">範圍：{s.warehouse?.name ?? "全部冷凍庫"}</span>
+                </div>
+                <div className="grid gap-1 text-[18px] sm:grid-cols-2">
+                  <p>明細 <b>{s.items.length}</b> 筆，<b className={diffCount > 0 ? "text-warn" : ""}>{diffCount === 0 ? "全部相符" : `${diffCount} 筆有差異`}</b></p>
+                  <p className="text-ink-2">提交：{s.submittedBy.displayName}・{fmtTime(s.submittedAt)}</p>
+                  {s.reviewedBy && <p className="text-ink-2 sm:col-span-2">審核：{s.reviewedBy.displayName}・{fmtTime(s.reviewedAt!)}{s.reviewNote && <>・「{s.reviewNote}」</>}</p>}
+                  {s.note && <p className="text-ink-2 sm:col-span-2">備註：{s.note}</p>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn" aria-expanded={open === s.id} onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "收合明細" : "看明細"}</button>
+                  {canReview && (
+                    <>
+                      <button type="button" className="btn-primary" disabled={review.isPending} onClick={async () => { const note = await dialog.prompt(`核准盤點 #${s.id}：備註（可留空）`); if (note !== null) review.mutate({ id: s.id, action: "approve", note }); }}>核准</button>
+                      <button type="button" className="btn text-bad" disabled={review.isPending} onClick={async () => { const note = await dialog.prompt(`退回盤點 #${s.id}：原因`); if (note !== null) review.mutate({ id: s.id, action: "reject", note }); }}>退回</button>
+                    </>
                   )}
-                </Fragment>
-              ))}
-              {list.data?.items.length === 0 && <tr><td colSpan={8} className="py-3 text-center text-ink-2">尚無盤點單</td></tr>}
-            </tbody>
-          </table></div>
-        </Card>
+                </div>
+                {open === s.id && (
+                  <div className="divide-y divide-line rounded-[10px] bg-bg-2 px-3">
+                    {s.items.map((i) => (
+                      <div key={i.id} className={`flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-[18px] ${i.diff !== 0 ? "font-bold" : ""}`}>
+                        <span className="min-w-[110px]">{i.locationCode}</span>
+                        <span className="min-w-0 flex-1">{i.product.name}<span className="ml-2 text-[16px] font-normal text-ink-2">批次 {i.batchNo}</span></span>
+                        <span className="whitespace-nowrap">系統 {i.systemQty} → 實盤 {i.countedQty}</span>
+                        <span className={`whitespace-nowrap ${i.diff < 0 ? "text-bad" : i.diff > 0 ? "text-ok" : "text-ink-2"}`}>{i.diff === 0 ? "相符" : i.diff > 0 ? `多 ${i.diff}` : `少 ${-i.diff}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -107,7 +105,7 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
   const counted = (b: BaselineItem) => counts[key(b)] ?? b.systemQty;
 
   const submit = useMutation({
-    mutationFn: () => post<{ id: number }>("/stocktakes", { warehouseId: warehouseId ?? undefined, note: note || null, items: baseline.data!.items.map((b) => ({ locationId: b.locationId, batchId: b.batchId, countedQty: counted(b) })) }),
+    mutationFn: () => post<{ id: number }>("/stocktakes", { warehouseId: warehouseId ?? undefined, note: note || null, items: baseline.data!.items.map((b) => ({ locationId: b.locationId, batchId: b.batchId, countedQty: counted(b), systemQty: b.systemQty })) }),
     onSuccess: (r) => onDone(r.id),
   });
   const diffs = baseline.data?.items.filter((b) => counted(b) !== b.systemQty).length ?? 0;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
@@ -42,19 +42,27 @@ export default function Outbound() {
   useEffect(() => {
     if (!stock.data || lines.length > 0 || !preset.locationId) return;
     const rows = stock.data.lines.filter((l) => l.location.id === preset.locationId && (!preset.batchId || l.batch.id === preset.batchId));
-    setLines(rows.map((l) => ({ batchId: l.batch.id, batchNo: l.batch.batchNo, expiryDate: l.batch.expiryDate, expired: false, locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 })));
+    setLines(rows.map((l) => ({ batchId: l.batch.id, batchNo: l.batch.batchNo, expiryDate: l.batch.expiryDate, expired: l.batch.expiryDate < new Date().toISOString().slice(0, 10), locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 })));
     setAdjusting(true);
   }, [stock.data, preset.locationId, preset.batchId, lines.length]);
 
+  // 每次商品／數量改變都配一個序號；只接受最新序號的回應，舊回應一律丟掉（審查 #3）
+  const suggestSeq = useRef(0);
   const suggest = useMutation({
-    mutationFn: (qty: number) => post<FefoSuggestion>("/stock/outbound/suggest", { productId: product!.id, quantity: qty }),
-    onSuccess: (s) => setLines(s.suggestions.map((x) => ({ ...x, quantity: x.take }))),
+    mutationFn: async (req: { productId: number; qty: number; seq: number }) => ({ seq: req.seq, ...(await post<FefoSuggestion>("/stock/outbound/suggest", { productId: req.productId, quantity: req.qty })) }),
+    onSuccess: (s) => { if (s.seq === suggestSeq.current) setLines(s.suggestions.map((x) => ({ ...x, quantity: x.take }))); },
   });
+  const suggestStale = suggest.data !== undefined && suggest.data.seq !== suggestSeq.current;
+  const waitingSuggest = !preset.locationId && quantity > 0 && (suggest.isPending || suggestStale || (!confirming && suggest.data === undefined));
 
-  // 填好數量就自動給建議（不需再按按鈕）
+  // 填好數量就自動給建議（不需再按按鈕）；改數量的當下先清掉舊建議，不讓人拿舊的往下走
   useEffect(() => {
-    if (!product || quantity <= 0 || preset.locationId) return;
-    const t = setTimeout(() => suggest.mutate(quantity), 300);
+    if (preset.locationId) return;
+    suggestSeq.current += 1;
+    setLines([]);
+    if (!product || quantity <= 0) { suggest.reset(); return; }
+    const seq = suggestSeq.current;
+    const t = setTimeout(() => suggest.mutate({ productId: product.id, qty: quantity, seq }), 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, quantity]);
@@ -62,13 +70,13 @@ export default function Outbound() {
   const total = lines.reduce((s, l) => s + (l.quantity || 0), 0);
   const over = lines.some((l) => l.quantity > l.available);
   const active = lines.filter((l) => l.quantity > 0);
-  const shortage = suggest.data?.shortage ?? 0;
+  const shortage = suggestStale ? 0 : (suggest.data?.shortage ?? 0);
 
   const stepText = (() => {
     if (!product) return "要出什麼？請先選商品";
     if (preset.locationId) return lines.length === 0 ? "正在讀取這個儲位的貨…" : active.length === 0 ? `要出多少？請在取貨位置填數量（單位：${product.unit}）` : over ? "有一筆超過該儲位的數量，請改小" : "請核對後按「下一步：核對並出庫」";
     if (quantity <= 0) return `要出多少？填數量後會自動列出建議的取貨位置（單位：${product.unit}）`;
-    if (suggest.isPending || (lines.length === 0 && !suggest.data)) return "正在找建議的取貨位置…";
+    if (waitingSuggest && lines.length === 0) return "正在找建議的取貨位置…";
     if (shortage > 0) return `庫存只有 ${suggest.data!.available} ${product.unit}，不夠 ${shortage} ${product.unit}；請改數量，或只出 ${suggest.data!.available} ${product.unit}`;
     if (over) return "有一筆超過該儲位的數量，請改小";
     if (active.length === 0) return "請在取貨位置填數量";
@@ -224,7 +232,8 @@ export default function Outbound() {
 
       <Step n={preset.locationId ? 3 : 4} title="確認出庫">
         {active.length === 0 ? <p className="text-warn">請先完成上面的步驟。</p> : over ? <p className="text-bad">請把超過的數量改小。</p> : <p className="text-[20px]"><b>{product!.name}</b> 共 {total} {unit}，從 {active.map((l) => l.locationCode).join("、")} 取</p>}
-        <button type="button" className="btn-primary mt-4 w-full sm:w-auto" disabled={active.length === 0 || over} onClick={() => setConfirming(true)}>下一步：核對並出庫</button>
+        {waitingSuggest && active.length > 0 && <p className="text-warn">建議還在更新中，請稍等。</p>}
+        <button type="button" className="btn-primary mt-4 w-full sm:w-auto" disabled={active.length === 0 || over || waitingSuggest} onClick={() => setConfirming(true)}>下一步：核對並出庫</button>
       </Step>
     </div>
   );
