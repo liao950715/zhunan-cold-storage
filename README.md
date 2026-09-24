@@ -5,8 +5,14 @@
 | | |
 |---|---|
 | 線上示範站 | [zhunan-cold-storage-demo.liao950715.workers.dev](https://zhunan-cold-storage-demo.liao950715.workers.dev/) — 歡迎隨意操作，**每天 03:00（台灣時間）自動重置**為示範資料 |
-| 示範站登入 | 不需同步碼，直接登入：`admin` / `admin1234`（管理員）或 `staff` / `staff1234`（工作人員） |
 | GitHub | [github.com/liao950715/zhunan-cold-storage](https://github.com/liao950715/zhunan-cold-storage) |
+
+### 示範站帳號（不需同步碼，直接登入）
+
+| 身分 | 帳號 | 密碼 | 可以做的事 |
+|---|---|---|---|
+| 管理員 | `admin` | `admin1234` | 全部功能：入出庫、搬移、報損、盤點審核、復原異動、商品與帳號管理、重置示範資料 |
+| 倉庫員工 | `staff` | `staff1234` | 查庫存、入庫、出庫、搬移、報損、盤點申報、編輯平面圖 |
 
 - 需求：[docs/PRD.md](docs/PRD.md)、[docs/REQUIREMENTS_DECISIONS.md](docs/REQUIREMENTS_DECISIONS.md)
 - 設計：[docs/TECHNICAL_DESIGN.md](docs/TECHNICAL_DESIGN.md)、[docs/DATABASE_DESIGN.md](docs/DATABASE_DESIGN.md)、[docs/UI_DESIGN.md](docs/UI_DESIGN.md)
