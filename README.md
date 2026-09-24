@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| 線上示範站 | [zhunan-cold-storage-demo.liao950715.workers.dev](https://zhunan-cold-storage-demo.liao950715.workers.dev/) — 歡迎隨意操作，**每天 03:00（台灣時間）自動重置**為示範資料 |
+| 示範網站 | [https://zhunan-cold-storage-demo.liao950715.workers.dev/](https://zhunan-cold-storage-demo.liao950715.workers.dev/) — 示範帳號 `admin/admin1234`、`staff/staff1234`（不需同步碼）；歡迎隨意操作，**每天 03:00（台灣時間）自動重置** |
 | GitHub | [github.com/liao950715/zhunan-cold-storage](https://github.com/liao950715/zhunan-cold-storage) |
 
 ### 示範站帳號（不需同步碼，直接登入）
