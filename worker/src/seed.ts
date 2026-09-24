@@ -46,17 +46,48 @@ export async function seedBase(db: Db) {
   }
 }
 
-/** 展示用初始庫存：走正式入庫服務，遵守全部規則；只在尚無批次時執行。 */
-export function seedDemoStock(db: Db) {
+/** 展示用初始庫存：走正式入庫服務，遵守全部規則；只在尚無批次時執行。mode=rich：示範站用，儲位幾乎填滿、看起來像真的在營運。 */
+export function seedDemoStock(db: Db, mode: "basic" | "rich" = "basic") {
   if (db.one<{ n: number }>("SELECT COUNT(*) AS n FROM Batch")!.n > 0) return;
   const admin = db.one<{ id: number }>("SELECT id FROM User WHERE username = 'admin'")!;
   const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
-  const rows: Array<{ product: string; receivedOffset: number; expiryOffset: number; allocations: Array<[string, number]> }> = [
+  type Row = { product: string; receivedOffset: number; expiryOffset: number; allocations: Array<[string, number]> };
+  const basic: Row[] = [
     { product: "紅蘿蔔", receivedOffset: -22, expiryOffset: 20, allocations: [["A-01-01", 12], ["A-01-02", 8]] },
     { product: "馬鈴薯", receivedOffset: -18, expiryOffset: 40, allocations: [["A-02-01", 18]] },
     { product: "草莓", receivedOffset: -3, expiryOffset: 3, allocations: [["B-01-01", 6]] },
     { product: "毛豆", receivedOffset: -13, expiryOffset: 25, allocations: [["B-02-01", 15]] },
   ];
+  // 示範站：42 格填 37 格、留 5 格空位；同商品多批次、幾批快到期、一批已過期
+  const rich: Row[] = [
+    { product: "甘藍菜", receivedOffset: -20, expiryOffset: 12, allocations: [["A-01-01", 20], ["A-01-02", 14]] },
+    { product: "甘藍菜", receivedOffset: -6, expiryOffset: 28, allocations: [["A-01-02", 6], ["A-01-03", 18]] },
+    { product: "高麗菜", receivedOffset: -15, expiryOffset: 18, allocations: [["A-01-04", 16], ["A-01-05", 20]] },
+    { product: "大白菜", receivedOffset: -9, expiryOffset: 22, allocations: [["A-01-06", 12]] },
+    { product: "紅蘿蔔", receivedOffset: -40, expiryOffset: 5, allocations: [["A-02-01", 18]] },
+    { product: "紅蘿蔔", receivedOffset: -12, expiryOffset: 30, allocations: [["A-02-02", 20], ["A-02-03", 9]] },
+    { product: "白蘿蔔", receivedOffset: -11, expiryOffset: 26, allocations: [["A-02-04", 15]] },
+    { product: "馬鈴薯", receivedOffset: -30, expiryOffset: 35, allocations: [["A-02-05", 20], ["A-02-06", 20]] },
+    { product: "馬鈴薯", receivedOffset: -8, expiryOffset: 50, allocations: [["A-03-01", 20], ["A-03-02", 11]] },
+    { product: "芋頭", receivedOffset: -25, expiryOffset: 33, allocations: [["A-03-03", 14]] },
+    { product: "南瓜", receivedOffset: -35, expiryOffset: 40, allocations: [["A-03-04", 17], ["A-03-05", 20]] },
+    { product: "冬瓜", receivedOffset: -14, expiryOffset: 24, allocations: [["A-03-06", 10]] },
+    { product: "玉米", receivedOffset: -16, expiryOffset: 9, allocations: [["A-04-01", 20], ["A-04-02", 20]] },
+    { product: "玉米", receivedOffset: -4, expiryOffset: 21, allocations: [["A-04-03", 13]] },
+    { product: "竹筍", receivedOffset: -7, expiryOffset: 6, allocations: [["A-04-04", 8]] },
+    { product: "青花菜", receivedOffset: -5, expiryOffset: 8, allocations: [["B-01-01", 16], ["B-01-02", 12]] },
+    { product: "花椰菜", receivedOffset: -6, expiryOffset: 7, allocations: [["B-01-03", 14]] },
+    { product: "草莓", receivedOffset: -5, expiryOffset: 2, allocations: [["B-01-04", 9]] },
+    { product: "草莓", receivedOffset: -10, expiryOffset: -2, allocations: [["B-01-05", 3]] },
+    { product: "芒果", receivedOffset: -8, expiryOffset: 6, allocations: [["B-01-06", 15], ["B-02-01", 20]] },
+    { product: "鳳梨", receivedOffset: -9, expiryOffset: 10, allocations: [["B-02-02", 18]] },
+    { product: "荔枝", receivedOffset: -3, expiryOffset: 4, allocations: [["B-02-03", 11]] },
+    { product: "香蕉", receivedOffset: -2, expiryOffset: 5, allocations: [["B-02-04", 12]] },
+    { product: "毛豆", receivedOffset: -20, expiryOffset: 15, allocations: [["B-02-05", 20], ["B-02-06", 20]] },
+    { product: "毛豆", receivedOffset: -3, expiryOffset: 27, allocations: [["B-03-01", 20], ["B-03-02", 8]] },
+    { product: "絲瓜", receivedOffset: -4, expiryOffset: 6, allocations: [["B-03-03", 7]] },
+  ];
+  const rows = mode === "rich" ? rich : basic;
   for (const r of rows) {
     const productId = db.one<{ id: number }>("SELECT id FROM Product WHERE name = ?", r.product)!.id;
     const allocations = r.allocations.map(([code, quantity]) => ({ locationId: db.one<{ id: number }>("SELECT id FROM Location WHERE code = ?", code)!.id, quantity }));

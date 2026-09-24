@@ -95,6 +95,7 @@
 | I-6 | 密碼不明文 | DB 中 passwordHash 以 `$2` 開頭且 ≠ 明文（NFR-10） |
 | I-7 | 布局不改庫存 | PUT layout 前後 Inventory 雜湊相同 |
 | I-8 | 單位不合計 | dashboard 回傳依單位分組，不出現跨單位總和 |
+| I-9 | 示範站種子與 Cron 重置 | DO RPC `resetFromCron("rich")` 後：42 儲位中 37 有貨、5 空位固定；每格 ≤ 容量、一儲位一商品；26 批次含已過期 |
 
 ---
 
@@ -132,7 +133,7 @@ npm run test:e2e            # Playwright（需先 npm run dev 或由 config webS
 
 | 層級 | 指令 | 結果 |
 |---|---|---|
-| API／整合（Workers pool，每測試獨立 DO 儲存） | `npm run test:worker` | **45 項通過**：AT-01～07、09、11～17、19～25；I-1（DB CHECK）、I-3（Idempotency）、I-4（並發 20 筆恰好 10 成功）、I-5、I-6、I-7、I-8；配對節流；展示重置權限 |
+| API／整合（Workers pool，每測試獨立 DO 儲存） | `npm run test:worker` | **56 項通過**（2026-09-24 含 FR-020 復原 10 項、I-9 示範站種子）：AT-01～07、09、11～17、19～25；I-1（DB CHECK）、I-3（Idempotency）、I-4（並發 20 筆恰好 10 成功）、I-5、I-6、I-7、I-8；配對節流；展示重置權限 |
 | 前端單元 | `npm run test -w web` | 5 項通過（平面圖幾何） |
 | E2E（Playwright，桌機 1440＋手機 Pixel 5） | `npm run test:e2e` | **10 項通過**：整合情境 30→5→10→3＝17（含 AT-04 即時提示、AT-08 重新整理）、AT-09／10 搜尋定位、AT-15／16／17／18 平面圖、AT-21～24 盤點權限、NFR-02 手機無橫向溢出 |
 | 人工驗證 | `docs/MANUAL_VERIFICATION.md` | 待組員填寫（含手機／平板實機） |

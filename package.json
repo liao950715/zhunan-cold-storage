@@ -16,7 +16,8 @@
     "deploy": "npm run build -w web && npm run deploy -w worker",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
-    "demo:reset": "node scripts/demo-reset.mjs"
+    "demo:reset": "node scripts/demo-reset.mjs",
+    "deploy:demo": "npm run build -w web && npm run deploy:demo -w worker"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
