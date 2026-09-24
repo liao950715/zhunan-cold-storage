@@ -5,7 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createApp } from "./app.js";
 import { Db } from "./lib/sql.js";
-import { SCHEMA_SQL, SCHEMA_VERSION } from "./db/schema.js";
+import { MIGRATE_V1_TO_V2, SCHEMA_SQL, SCHEMA_VERSION } from "./db/schema.js";
 import { seedBase, seedDemoStock } from "./seed.js";
 
 export interface Env {
@@ -26,6 +26,7 @@ export class WarehouseDO extends DurableObject<Env> {
       db.exec(SCHEMA_SQL);
       const v = db.one<{ value: string }>("SELECT value FROM meta WHERE key = 'schemaVersion'");
       if (!v) db.run("INSERT INTO meta (key, value) VALUES ('schemaVersion', ?)", String(SCHEMA_VERSION));
+      else if (Number(v.value) < 2) db.tx(() => db.exec(MIGRATE_V1_TO_V2)); // 既有資料庫：升級到 v2（FR-020 復原）
       if (db.one<{ n: number }>("SELECT COUNT(*) AS n FROM User")!.n === 0) {
         await seedBase(db);
         seedDemoStock(db);

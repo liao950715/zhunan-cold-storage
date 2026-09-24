@@ -11,6 +11,12 @@
 > - 測試：`@cloudflare/vitest-pool-workers`，每個測試獨立 DO 儲存（自動 seed）。
 > - 以下 §1–§9 的 Prisma／Express 內容為 v0.1 設計紀錄；API 契約、錯誤碼、業務規則不變。
 
+> **v1.1（2026-09-24）FR-020 庫存異動復原**
+> - API：`GET /api/movements/:id/reversal-preview`（ADMIN；回傳原始異動、預計變化、`blocked` 原因）、`POST /api/movements/:id/reverse { reason }`（ADMIN；201 回傳反向紀錄）。錯誤碼新增 `ALREADY_REVERSED`（409）；其餘沿用 `INSUFFICIENT_STOCK`／`CAPACITY_EXCEEDED`／`LOCATION_PRODUCT_CONFLICT`／`NOT_FOUND`（儲位已封存）。
+> - 邏輯在 `worker/src/services/stockService.ts` 的 `reverseMovement`：同一 `db.tx` 內依原始類型做反向補償（IN 扣回目的；OUT／DAMAGE 加回來源；TRANSFER 目的扣、來源加；ADJUSTMENT 反方向），每步走既有的 `removeInventory`（條件更新，不足即拒絕）與 `ensureCanAdd`（單一商品、容量）；任何失敗整筆回滾。
+> - 防重複：`StockMovement.reversalOfId UNIQUE` ＋ 交易內先查；REVERSAL 本身不可再復原。
+> - 前端：異動紀錄頁（管理員）每筆「復原這筆操作」→ 內嵌面板（原始資訊、預計變化、原因必填、確認／取消）；已復原者顯示「已復原（紀錄 #n）」並隱藏按鈕；工作人員只看得到。
+
 
 ---
 

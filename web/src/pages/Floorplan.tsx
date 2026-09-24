@@ -25,13 +25,23 @@ export default function Floorplan() {
   const layout = useQuery({ queryKey: ["layout", wh?.id], queryFn: () => get<WarehouseLayout>(`/warehouses/${wh!.id}/layout`), enabled: !!wh });
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<DraftRack[]>([]);
+  const [draft, setDraftRaw] = useState<DraftRack[]>([]);
+  const [history, setHistory] = useState<DraftRack[][]>([]); // 編輯模式的復原堆疊
+  /** 每次變更前把上一版推進堆疊，供「復原上一步」 */
+  const setDraft = (next: DraftRack[] | ((prev: DraftRack[]) => DraftRack[])) => {
+    setDraftRaw((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      if (editing && value !== prev) setHistory((h) => [...h.slice(-30), prev]);
+      return value;
+    });
+  };
+  function undo() { setHistory((h) => { const prev = h[h.length - 1]; if (prev) setDraftRaw(prev); return h.slice(0, -1); }); }
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedRackKey, setSelectedRackKey] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const highlightCodes = useMemo(() => new Set((params.get("highlight") ?? "").split(",").filter(Boolean)), [params]);
 
-  useEffect(() => { if (layout.data) setDraft(toDraft(layout.data)); }, [layout.data]);
+  useEffect(() => { if (layout.data) setDraftRaw(toDraft(layout.data)); }, [layout.data]);
 
   const racks = editing ? draft : layout.data ? toDraft(layout.data) : [];
   const allCodes = useMemo(() => new Set(racks.flatMap((r) => r.locations.map((l) => l.code))), [racks]);
@@ -61,8 +71,29 @@ export default function Floorplan() {
     onError: (e) => setMessage({ kind: "error", text: errorMessage(e) }),
   });
 
-  function startEdit() { if (layout.data) setDraft(toDraft(layout.data)); setEditing(true); setMessage(null); setSelectedLocation(null); }
-  function cancelEdit() { setEditing(false); setSelectedRackKey(null); setSelectedLocation(null); if (layout.data) setDraft(toDraft(layout.data)); }
+  function startEdit() { if (layout.data) setDraftRaw(toDraft(layout.data)); setHistory([]); setEditing(true); setMessage(null); setSelectedLocation(null); }
+  function cancelEdit() { setEditing(false); setSelectedRackKey(null); setSelectedLocation(null); setHistory([]); if (layout.data) setDraftRaw(toDraft(layout.data)); }
+  /** 儲存前先核對：列出這次改了什麼 */
+  async function confirmSave() {
+    if (!layout.data) return;
+    const orig = toDraft(layout.data);
+    const newRacks = draft.filter((r) => r.id === undefined);
+    const movedRacks = draft.filter((r) => r.id !== undefined && orig.some((o) => o.id === r.id && (o.x !== r.x || o.y !== r.y || o.width !== r.width || o.height !== r.height || o.label !== r.label)));
+    let newLocs = 0, movedLocs = 0;
+    for (const r of draft) for (const l of r.locations) {
+      if (l.id === undefined) { newLocs++; continue; }
+      const o = orig.flatMap((x) => x.locations).find((x) => x.id === l.id);
+      if (o && (o.x !== l.x || o.y !== l.y || o.width !== l.width || o.height !== l.height || o.defaultCapacity !== l.defaultCapacity)) movedLocs++;
+    }
+    const lines = [
+      newRacks.length ? `新增貨架 ${newRacks.map((r) => r.code).join("、")}（含 ${newRacks.reduce((n, r) => n + r.locations.length, 0)} 個儲位）` : "",
+      movedRacks.length ? `移動或修改貨架 ${movedRacks.map((r) => r.code).join("、")}` : "",
+      newLocs ? `新增儲位 ${newLocs} 個` : "",
+      movedLocs ? `移動或修改儲位 ${movedLocs} 個` : "",
+    ].filter(Boolean);
+    if (lines.length === 0) { setMessage({ kind: "ok", text: "沒有變更，不需要儲存" }); return; }
+    if (await dialog.confirm("儲存倉庫配置", lines.map((l) => "・" + l).join("\n") + "\n\n布局變更不會影響任何庫存。確定儲存？")) save.mutate();
+  }
   function addRack() {
     if (!layout.data) return;
     const code = nextRackCode(draft);
@@ -105,7 +136,7 @@ export default function Floorplan() {
 
       {editing && (
         <div className="flex flex-wrap items-center gap-3 rounded-[10px] border-l-4 border-brand bg-brand-soft px-4 py-3 text-[18px]">
-          <span><b>正在調整貨架配置</b> — 拖曳貨架把手或儲位可移動；完成請按「儲存倉庫配置」。這裡的變更不會影響任何庫存。</span>
+          <span><b>正在調整貨架配置</b> — 拖曳貨架把手或儲位可移動，放開會自動對齊格線；按錯可「復原上一步」；完成請按「儲存倉庫配置」（會先列出變更讓你核對）。這裡的變更不會影響任何庫存。</span>
         </div>
       )}
 
@@ -127,11 +158,12 @@ export default function Floorplan() {
             <button className="btn-sm" onClick={startEdit}>調整貨架配置（管理用）</button>
           ) : (
             <>
-              <button className="btn" onClick={addRack}>＋ 新增貨架</button>
+              <button className="btn" onClick={addRack} disabled={!layout.data}>＋ 新增貨架</button>
               <button className="btn" onClick={addLocation} disabled={!selectedRack}>＋ 新增儲位</button>
               <button className="btn text-bad" onClick={removeSelected} disabled={!selectedRack && !selectedLocation}>刪除所選</button>
+              <button className="btn" onClick={undo} disabled={history.length === 0}>復原上一步</button>
               <button className="btn" onClick={cancelEdit}>取消</button>
-              <button className="btn-primary" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? "儲存中…" : "儲存倉庫配置"}</button>
+              <button className="btn-primary" onClick={confirmSave} disabled={save.isPending}>{save.isPending ? "儲存中…" : "儲存倉庫配置"}</button>
             </>
           )}
         </div>

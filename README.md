@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| 線上系統 | [zhunan-cold-storage.liao950715.workers.dev](https://zhunan-cold-storage.liao950715.workers.dev/) — 第一次開啟需輸入同步碼（向管理員取得）；示範帳號 `admin/admin1234`、`staff/staff1234` |
+| 線上系統 | [https://zhunan-cold-storage.liao950715.workers.dev/](https://zhunan-cold-storage.liao950715.workers.dev/floorplan) — 第一次開啟需輸入同步碼（向管理員取得）；示範帳號 `admin/admin1234`、`staff/staff1234` |
 | GitHub | [github.com/liao950715/zhunan-cold-storage](https://github.com/liao950715/zhunan-cold-storage) |
 
 - 需求：[docs/PRD.md](docs/PRD.md)、[docs/REQUIREMENTS_DECISIONS.md](docs/REQUIREMENTS_DECISIONS.md)

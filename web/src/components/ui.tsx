@@ -80,6 +80,6 @@ export function Collapsible({ label, children, defaultOpen = false }: { label: s
   );
 }
 
-export const TYPE_LABEL: Record<string, string> = { IN: "入庫", OUT: "出庫", TRANSFER: "搬移", DAMAGE: "報損", ADJUSTMENT: "盤點調整" };
+export const TYPE_LABEL: Record<string, string> = { IN: "入庫", OUT: "出庫", TRANSFER: "搬移", DAMAGE: "報損", ADJUSTMENT: "盤點調整", REVERSAL: "復原" };
 export const fmtTime = (iso: string) => new Date(iso).toLocaleString("zh-TW", { hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 export const fmtDate = (d: string) => d.replace(/-/g, "/");

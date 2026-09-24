@@ -222,10 +222,17 @@ export function createApp(env: AppEnv) {
   // ---------- 異動紀錄 ----------
   app.get("/api/movements", (c) => {
     const s = z.object({
-      type: z.enum(["IN", "OUT", "TRANSFER", "DAMAGE", "ADJUSTMENT"]).optional(), productId: z.coerce.number().int().positive().optional(), batchId: z.coerce.number().int().positive().optional(), locationId: z.coerce.number().int().positive().optional(),
+      type: z.enum(["IN", "OUT", "TRANSFER", "DAMAGE", "ADJUSTMENT", "REVERSAL"]).optional(), productId: z.coerce.number().int().positive().optional(), batchId: z.coerce.number().int().positive().optional(), locationId: z.coerce.number().int().positive().optional(),
       dateFrom: dateString.optional(), dateTo: dateString.optional(), limit: z.coerce.number().int().min(1).max(500).default(100), offset: z.coerce.number().int().min(0).default(0),
     }).parse(c.req.query());
     return c.json(q.listMovements(db, s));
+  });
+
+  // ---------- 異動復原（FR-020，僅 ADMIN） ----------
+  app.get("/api/movements/:id/reversal-preview", requireAdmin, (c) => c.json(stock.previewReversal(db, idParam(c.req.param("id")))));
+  app.post("/api/movements/:id/reverse", requireAdmin, async (c) => {
+    const { reason } = z.object({ reason: z.string().trim().min(1, "請填寫復原原因").max(500) }).parse(await c.req.json());
+    return c.json(stock.reverseMovement(db, idParam(c.req.param("id")), reason, ctxOf(c)), 201);
   });
 
   // ---------- 盤點 ----------

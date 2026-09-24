@@ -2,9 +2,12 @@ import type { DraftLocation, DraftRack, Rect, WarehouseLayout } from "../../api/
 
 export const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
-/** 貨架限制在冷凍庫內；儲位限制在貨架內（越界後端也會拒絕）。 */
+export const GRID = 20;
+const snap = (v: number) => Math.round(v / GRID) * GRID;
+
+/** 貨架限制在冷凍庫內；儲位限制在貨架內（越界後端也會拒絕）。放開時自動對準 20 單位格線。 */
 export function clampRect(r: Rect, outerW: number, outerH: number): Rect {
-  return { ...r, x: clamp(Math.round(r.x), 0, Math.max(0, outerW - r.width)), y: clamp(Math.round(r.y), 0, Math.max(0, outerH - r.height)) };
+  return { ...r, x: clamp(snap(r.x), 0, Math.max(0, outerW - r.width)), y: clamp(snap(r.y), 0, Math.max(0, outerH - r.height)) };
 }
 
 export const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;

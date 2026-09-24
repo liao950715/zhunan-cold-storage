@@ -63,6 +63,20 @@
 | AT-24 | 提交後庫存又改變 | API | 提交後出庫 → approve 409 `STOCKTAKE_CONFLICT`，庫存不變 | 4 |
 | AT-25 | 異動歷史 | API, E2E | 執行五類操作後 `/movements?type=` 各可查；數量前後可追溯 | 2/4 |
 
+### 2.3b 庫存異動復原（FR-020，v1.1）
+
+| AT | 情境 | 測試層級 | 測試內容 |
+|---|---|---|---|
+| AT-33 | 管理員復原錯誤出庫 | API, E2E | 出庫 8 後復原 → 儲位回 20；預覽 changes 正確 |
+| AT-34 | 工作人員不能復原 | API, E2E | reverse／preview 皆 403；前端無按鈕 |
+| AT-35 | 保留原始＋新增反向 | API | 原始 OUT 仍在且 `reversedById` 指向新紀錄；REVERSAL 含 reversalOfId／reason／操作者 |
+| AT-36 | 不得重複復原 | API | 第二次 409 `ALREADY_REVERSED`；並發 5 次只成功 1 次；REVERSAL 不可再復原 |
+| AT-37 | 復原入庫庫存不足 | API | 後續已出庫 → 409 `INSUFFICIENT_STOCK`，快照不變 |
+| AT-38 | 復原出庫超容量／混放 | API | 409 `CAPACITY_EXCEEDED`／`LOCATION_PRODUCT_CONFLICT` |
+| AT-39 | 復原搬移 | API | 目的扣回、來源加回，總量不變 |
+| AT-40 | 失敗無部分更新 | API | 搬移復原第二步失敗 → 第一步也回滾、無 REVERSAL 紀錄 |
+| AT-41 | 重新整理後仍在 | E2E | 復原後 reload，「已復原」標記與 REVERSAL 紀錄仍存在 |
+
 ### 2.4 整合展示情境（E2E，Stage 5）
 
 甘藍菜入庫 30（20+10）→ 搬移 5 → 出庫 10（FEFO）→ 報損 3 → 商品總量 **17**；儲位明細合計 17；異動紀錄 IN×2、TRANSFER×1、OUT×n、DAMAGE×1；重新整理後仍為 17。

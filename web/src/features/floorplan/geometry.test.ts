@@ -5,8 +5,9 @@ import type { DraftRack } from "../../api/types";
 const rack = (code: string, x: number, y: number): DraftRack => ({ key: code, code, label: null, x, y, width: 100, height: 50, locations: [] });
 
 describe("floorplan geometry", () => {
-  it("clampRect 把圖形限制在邊界內", () => {
+  it("clampRect 把圖形限制在邊界內，並對準 20 單位格線", () => {
     expect(clampRect({ x: -5, y: 790, width: 100, height: 50 }, 1200, 800)).toEqual({ x: 0, y: 750, width: 100, height: 50 });
+    expect(clampRect({ x: 87, y: 113, width: 100, height: 50 }, 1200, 800)).toEqual({ x: 80, y: 120, width: 100, height: 50 });
   });
 
   it("findRackOverlaps 找出重疊配對（只警告）", () => {

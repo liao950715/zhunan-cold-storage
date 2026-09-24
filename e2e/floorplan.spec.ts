@@ -12,12 +12,15 @@ test.describe.serial("平面圖配置編輯（AT-15、AT-16、AT-17）", () => {
     await pairAndLogin(page, "staff");
     const before = await api(page, "GET", "/search?q=紅蘿蔔");
     await page.goto("/floorplan?warehouse=A");
-    await expect(page.getByText("4 座貨架")).toBeVisible(); // 等布局載入完再進編輯
+    await expect(page.getByText("4 座貨架")).toBeVisible();
+    await expect(page.locator(".konvajs-content")).toBeVisible(); // 等平面圖（layout）載入完再進編輯
     await page.getByRole("button", { name: "調整貨架配置（管理用）" }).click();
     await expect(page.getByText("正在調整貨架配置")).toBeVisible();
     await page.getByRole("button", { name: "＋ 新增貨架" }).click();
     await expect(page.getByRole("heading", { name: "貨架 05" })).toBeVisible(); // 新貨架已在側欄
     await page.getByRole("button", { name: "儲存倉庫配置" }).click();
+    await expect(page.getByText(/新增貨架 05/)).toBeVisible(); // 儲存前先核對變更
+    await page.getByRole("button", { name: "確定" }).click();
     await expect(page.getByText("倉庫配置已儲存")).toBeVisible();
     await page.reload();
     await expect(page.getByText("5 座貨架")).toBeVisible();

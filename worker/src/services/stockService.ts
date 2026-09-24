@@ -11,7 +11,7 @@ export interface Ctx {
   operator: { id: number };
   idempotencyKey?: string;
 }
-type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT";
+type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT" | "REVERSAL";
 interface ProductRow { id: number; name: string; unit: string; status: string }
 interface LocationRow { id: number; code: string; defaultCapacity: number | null; status: string; warehouseId: number; warehouseCode: string }
 
@@ -88,16 +88,18 @@ interface MovementInput {
   from?: { locationId: number; code: string; before: number; after: number };
   to?: { locationId: number; code: string; before: number; after: number };
   reason?: string | null; referenceType?: string; referenceId?: number;
+  reversalOfId?: number; reversalReason?: string;
 }
 
 function createMovement(db: Db, operatorId: number, m: MovementInput) {
   return db.insert(
-    `INSERT INTO StockMovement (type, productId, batchId, quantity, fromLocationId, fromBeforeQty, fromAfterQty, toLocationId, toBeforeQty, toAfterQty, productNameSnapshot, locationCodeSnapshot, reason, referenceType, referenceId, operatorId)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO StockMovement (type, productId, batchId, quantity, fromLocationId, fromBeforeQty, fromAfterQty, toLocationId, toBeforeQty, toAfterQty, productNameSnapshot, locationCodeSnapshot, reason, referenceType, referenceId, operatorId, reversalOfId, reversalReason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     m.type, m.productId, m.batchId, m.quantity,
     m.from?.locationId ?? null, m.from?.before ?? null, m.from?.after ?? null,
     m.to?.locationId ?? null, m.to?.before ?? null, m.to?.after ?? null,
     m.productName, [m.from?.code, m.to?.code].filter(Boolean).join("→"), m.reason ?? null, m.referenceType ?? null, m.referenceId ?? null, operatorId,
+    m.reversalOfId ?? null, m.reversalReason ?? null,
   );
 }
 
@@ -291,4 +293,91 @@ export function setCapacities(db: Db, locationId: number, input: CapacityInput, 
     const updated = db.one<{ defaultCapacity: number | null }>("SELECT defaultCapacity FROM Location WHERE id = ?", locationId)!;
     return { locationId, defaultCapacity: updated.defaultCapacity, items };
   });
+}
+
+// ---------- 庫存異動復原（FR-020，僅 ADMIN；路由層檢查） ----------
+
+interface MovementRow {
+  id: number; type: MovementType; productId: number; batchId: number; fromLocationId: number | null; toLocationId: number | null; quantity: number;
+  productNameSnapshot: string; reversalOfId: number | null;
+}
+
+/**
+ * 以「反向異動」復原：不刪不改原始紀錄。
+ * IN → 從目的儲位扣回；OUT／DAMAGE → 加回來源儲位；TRANSFER → 目的扣、來源加；ADJUSTMENT → 反方向。
+ * 每一步重新驗證庫存、儲位狀態、單一商品、容量；任一失敗整筆回滾。DB 上 reversalOfId UNIQUE 防重複。
+ */
+export function reverseMovement(db: Db, movementId: number, reason: string, ctx: Ctx) {
+  return runStockTx(db, ctx, () => {
+    const m = db.one<MovementRow>("SELECT id, type, productId, batchId, fromLocationId, toLocationId, quantity, productNameSnapshot, reversalOfId FROM StockMovement WHERE id = ?", movementId);
+    if (!m) throw notFound("異動紀錄");
+    if (m.type === "REVERSAL") throw new AppError("CONFLICT", 409, "無法復原：這筆本身是復原紀錄，不能再復原。");
+    const done = db.one<{ id: number; createdAt: string }>("SELECT id, createdAt FROM StockMovement WHERE reversalOfId = ?", m.id);
+    if (done) throw new AppError("ALREADY_REVERSED", 409, `無法復原：這筆異動已在 ${done.createdAt.slice(0, 16).replace("T", " ")} 復原過（紀錄 #${done.id}），不能重複復原。`, { reversalId: done.id });
+    const product = db.one<{ id: number; name: string; unit: string }>("SELECT id, name, unit FROM Product WHERE id = ?", m.productId);
+    if (!product) throw notFound("商品");
+    const batch = db.one<{ id: number; batchNo: string }>("SELECT id, batchNo FROM Batch WHERE id = ?", m.batchId);
+    if (!batch) throw notFound("批次");
+
+    // 要「加回去」的儲位：必須啟用、商品相容、容量足夠（後續異動可能已放了別的商品或塞滿）
+    const addBack = (locationId: number) => {
+      const loc = ensureCanAdd(db, locationId, product, m.quantity);
+      const r = addInventory(db, m.batchId, locationId, m.quantity);
+      return { locationId, code: loc.code, ...r };
+    };
+    // 要「扣回來」的儲位：必須仍有足夠的該批次庫存（後續可能已出庫）
+    const takeBack = (locationId: number) => {
+      const loc = loadLocation(db, locationId);
+      const r = removeInventory(db, m.batchId, locationId, m.quantity, `批次 ${batch.batchNo} 於儲位 ${loc.code}`);
+      return { locationId, code: loc.code, ...r };
+    };
+
+    let from: ReturnType<typeof takeBack> | undefined;
+    let to: ReturnType<typeof addBack> | undefined;
+    switch (m.type) {
+      case "IN":
+        from = takeBack(m.toLocationId!); break;
+      case "OUT":
+      case "DAMAGE":
+        to = addBack(m.fromLocationId!); break;
+      case "TRANSFER":
+        from = takeBack(m.toLocationId!);
+        to = addBack(m.fromLocationId!);
+        break;
+      case "ADJUSTMENT":
+        if (m.toLocationId) from = takeBack(m.toLocationId);
+        else to = addBack(m.fromLocationId!);
+        break;
+    }
+    const movementId2 = createMovement(db, ctx.operator.id, {
+      type: "REVERSAL", productId: product.id, productName: product.name, batchId: m.batchId, quantity: m.quantity,
+      from, to, reason: `復原 #${m.id}（${m.type}）：${reason}`, referenceType: "REVERSAL", referenceId: m.id, reversalOfId: m.id, reversalReason: reason,
+    });
+    return { reversalId: movementId2, originalId: m.id, originalType: m.type, quantity: m.quantity, from, to };
+  });
+}
+
+/** 預覽：不寫入，只算出復原會怎麼變、能不能復原（給確認畫面）。 */
+export function previewReversal(db: Db, movementId: number) {
+  const m = db.one<MovementRow & { fromCode: string | null; toCode: string | null; batchNo: string; unit: string; createdAt: string; reason: string | null }>(
+    `SELECT m.id, m.type, m.productId, m.batchId, m.fromLocationId, m.toLocationId, m.quantity, m.productNameSnapshot, m.reversalOfId, m.createdAt, m.reason,
+       lf.code AS fromCode, lt.code AS toCode, b.batchNo, p.unit
+     FROM StockMovement m JOIN Batch b ON b.id = m.batchId JOIN Product p ON p.id = m.productId
+     LEFT JOIN Location lf ON lf.id = m.fromLocationId LEFT JOIN Location lt ON lt.id = m.toLocationId WHERE m.id = ?`, movementId);
+  if (!m) throw notFound("異動紀錄");
+  const done = db.one<{ id: number }>("SELECT id FROM StockMovement WHERE reversalOfId = ?", m.id);
+  const qtyAt = (locationId: number | null) => (locationId ? db.one<{ quantity: number }>("SELECT quantity FROM Inventory WHERE batchId = ? AND locationId = ?", m.batchId, locationId)?.quantity ?? 0 : 0);
+  const changes: Array<{ locationCode: string; delta: number; before: number; after: number }> = [];
+  const push = (code: string | null, locationId: number | null, delta: number) => { if (code && locationId) { const before = qtyAt(locationId); changes.push({ locationCode: code, delta, before, after: before + delta }); } };
+  switch (m.type) {
+    case "IN": push(m.toCode, m.toLocationId, -m.quantity); break;
+    case "OUT": case "DAMAGE": push(m.fromCode, m.fromLocationId, +m.quantity); break;
+    case "TRANSFER": push(m.toCode, m.toLocationId, -m.quantity); push(m.fromCode, m.fromLocationId, +m.quantity); break;
+    case "ADJUSTMENT": if (m.toLocationId) push(m.toCode, m.toLocationId, -m.quantity); else push(m.fromCode, m.fromLocationId, +m.quantity); break;
+  }
+  let blocked: string | null = null;
+  if (m.type === "REVERSAL") blocked = "這筆本身是復原紀錄，不能再復原。";
+  else if (done) blocked = `已復原過（紀錄 #${done.id}），不能重複復原。`;
+  else for (const c of changes) if (c.after < 0) blocked = `${c.locationCode} 目前這批只剩 ${c.before} ${m.unit}，不足以扣回 ${-c.delta} ${m.unit}（可能已被後續出庫）。`;
+  return { movement: { id: m.id, type: m.type, productName: m.productNameSnapshot, unit: m.unit, batchNo: m.batchNo, quantity: m.quantity, fromCode: m.fromCode, toCode: m.toCode, createdAt: m.createdAt, reason: m.reason }, changes, reversedById: done?.id ?? null, blocked };
 }

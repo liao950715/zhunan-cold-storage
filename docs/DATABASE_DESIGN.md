@@ -5,6 +5,8 @@
 
 > 所有 `id` 為自增整數主鍵；所有表含 `createdAt`、`updatedAt`（DateTime）。日期型欄位（到期日、入庫日）以 `DateTime` 儲存、API 以 `YYYY-MM-DD` 交換。
 
+> **v1.1（2026-09-24）FR-020**：`StockMovement.type` 新增 `REVERSAL`；新增欄位 `reversalOfId INTEGER UNIQUE REFERENCES StockMovement(id)`（反向紀錄指向原始異動；UNIQUE ＝ 同一原始異動只能復原一次）、`reversalReason TEXT`。復原者＝`operatorId`、時間＝`createdAt`。schema v2 遷移（`MIGRATE_V1_TO_V2`）以重建表方式套用到既有資料庫。
+
 > **v0.2 變更（2026-09-23）**：資料表改以 SQL 直接建立於 Durable Object SQLite（`worker/src/db/schema.ts`），欄位與約束同本文件；日期欄位改存 `YYYY-MM-DD` 文字、時間戳存 ISO 字串；新增 `PairAttempt`（配對節流）與 `meta`（schema 版本）表。`CHECK (quantity >= 0)` 直接寫在建表語句。
 
 

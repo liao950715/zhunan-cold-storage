@@ -152,7 +152,8 @@ export function listMovements(db: Db, q: { type?: string; productId?: number; ba
   const where = conds.length ? "WHERE " + conds.join(" AND ") : "";
   const total = db.one<{ n: number }>(`SELECT COUNT(*) AS n FROM StockMovement m ${where}`, ...params)!.n;
   const rows = db.all<Record<string, string | number | null>>(
-    `SELECT m.*, b.batchNo, p.name AS productName, p.unit, lf.code AS fromCode, lt.code AS toCode, u.displayName AS operatorName
+    `SELECT m.*, b.batchNo, p.name AS productName, p.unit, lf.code AS fromCode, lt.code AS toCode, u.displayName AS operatorName,
+       (SELECT r.id FROM StockMovement r WHERE r.reversalOfId = m.id) AS reversedById
      FROM StockMovement m JOIN Batch b ON b.id = m.batchId JOIN Product p ON p.id = m.productId
      LEFT JOIN Location lf ON lf.id = m.fromLocationId LEFT JOIN Location lt ON lt.id = m.toLocationId JOIN User u ON u.id = m.operatorId
      ${where} ORDER BY m.id DESC LIMIT ? OFFSET ?`, ...params, q.limit, q.offset);

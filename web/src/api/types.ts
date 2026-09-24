@@ -154,7 +154,7 @@ export interface FefoSuggestion {
   suggestions: Array<{ batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; take: number }>;
 }
 
-export type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT";
+export type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT" | "REVERSAL";
 
 export interface Movement {
   id: number;
@@ -179,6 +179,18 @@ export interface Movement {
   fromLocation: { code: string } | null;
   toLocation: { code: string } | null;
   operator: { id: number; displayName: string };
+  /** FR-020：這筆是復原紀錄時指向原始異動 */
+  reversalOfId: number | null;
+  reversalReason: string | null;
+  /** 這筆已被哪一筆復原紀錄復原（null＝未復原） */
+  reversedById: number | null;
+}
+
+export interface ReversalPreview {
+  movement: { id: number; type: MovementType; productName: string; unit: string; batchNo: string; quantity: number; fromCode: string | null; toCode: string | null; createdAt: string; reason: string | null };
+  changes: Array<{ locationCode: string; delta: number; before: number; after: number }>;
+  reversedById: number | null;
+  blocked: string | null;
 }
 
 export interface StocktakeItem {

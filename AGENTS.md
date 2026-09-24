@@ -40,6 +40,14 @@
 3. Git commit hash 與訊息。
 4. 尚待確認的問題或已知限制。
 
+## 5b. 庫存異動復原（FR-020，不可違反）
+
+- Inventory reversals must create compensating transactions.（復原一律新增反向異動 `REVERSAL`）
+- Never delete historical stock movements to implement undo.（絕不刪除或覆寫歷史異動來做復原）
+- Only administrators may reverse inventory transactions.（僅管理員可復原；前後端都要擋）
+- All reversals must preserve inventory invariants and use database transactions.（復原必須維持不負數、單一商品、容量等不變量，且在同一交易內）
+- Do not implement unsafe forced reversals.（無法安全恢復就拒絕並說明原因，不做強制復原）
+
 ## 6. 安全與資料
 
 18. 密碼一律 bcrypt 雜湊，不記錄明文、不寫入 log。
