@@ -49,21 +49,23 @@ export function CreateProductInline({ initialName = "", onCreated, onCancel }: {
   const qc = useQueryClient();
   const [form, setForm] = useState({ name: initialName, category: "", unit: "籠", lowStockThreshold: 10, expiryAlertDays: 14 });
   const m = useMutation({
-    mutationFn: () => post<Product>("/products", { ...form, category: form.category || null }),
+    mutationFn: () => post<Product>("/products", { ...form, name: form.name.trim(), unit: form.unit.trim(), category: form.category.trim() || null }),
     onSuccess: async (p) => {
       await qc.invalidateQueries({ queryKey: ["products"] });
       onCreated(p);
     },
   });
+  const nameBlank = form.name.trim().length === 0;
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (nameBlank || form.unit.trim().length === 0) return; // 只有空白不算名稱
     m.mutate();
   }
   return (
     <form onSubmit={submit} className="rounded-lg border border-line bg-brand-soft p-4 space-y-3">
       <p className="text-[18px] font-bold">新增商品（建立後會自動選好）</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="名稱 *"><input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <Field label="名稱 *" hint={form.name.length > 0 && nameBlank ? <span className="text-bad">名稱不能只有空白</span> : undefined}><input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <Field label="類別"><input className="input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
         <Field label="計量單位 *"><input className="input" required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
         <Field label="低庫存警戒值"><input type="number" min={0} className="input" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: Number(e.target.value) })} /></Field>
@@ -71,7 +73,7 @@ export function CreateProductInline({ initialName = "", onCreated, onCancel }: {
       </div>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
       <div className="flex gap-2">
-        <button type="submit" className="btn-primary" disabled={m.isPending}>建立商品</button>
+        <button type="submit" className="btn-primary" disabled={m.isPending || nameBlank || form.unit.trim().length === 0}>建立商品</button>
         <button type="button" className="btn" onClick={onCancel}>取消</button>
       </div>
     </form>

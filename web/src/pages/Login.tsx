@@ -12,6 +12,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -38,7 +39,14 @@ export default function Login() {
         </div>
         {expired && <Message kind="warn">登入已逾時（超過 12 小時）或已在別處登出，請重新登入。您剛才在畫面上填的內容需要重新輸入。</Message>}
         <Field label="帳號"><input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required /></Field>
-        <Field label="密碼"><input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></Field>
+        {/* 密碼欄：切換按鈕放在 label 外面，label 只指向輸入框 */}
+        <div>
+          <label htmlFor="login-password" className="label block">密碼</label>
+          <div className="relative">
+            <input id="login-password" type={showPw ? "text" : "password"} className="input pr-24" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-[8px] px-3 py-1 text-[16px] font-medium text-brand-deep hover:bg-brand-soft" onClick={() => setShowPw(!showPw)} aria-pressed={showPw} aria-label={showPw ? "隱藏密碼" : "顯示密碼"}>{showPw ? "隱藏" : "顯示"}</button>
+          </div>
+        </div>
         {error && <Message kind="error">{error}</Message>}
         <button type="submit" disabled={busy} className="btn-primary w-full">{busy ? "登入中…" : "登入"}</button>
       </form>

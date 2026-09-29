@@ -14,7 +14,7 @@ export async function pairAndLogin(page: Page, who: keyof typeof ACCOUNTS) {
   await page.getByRole("button", { name: "配對這台裝置" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.getByLabel("帳號").fill(ACCOUNTS[who].username);
-  await page.getByLabel("密碼").fill(ACCOUNTS[who].password);
+  await page.getByLabel("密碼", { exact: true }).fill(ACCOUNTS[who].password);
   await page.getByRole("button", { name: "登入" }).click();
   await expect(page.getByRole("heading", { name: "首頁" })).toBeVisible();
 }
@@ -60,6 +60,8 @@ export async function clickCell(page: Page, code: string, canvasIndex = 0) {
   }
   if (!target) throw new Error(`cell ${code} not found`);
   const canvas = page.locator(".konvajs-content canvas").nth(canvasIndex * 2); // 每個 Stage 有 2 個 layer canvas
+  await canvas.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(600); // 頁面可能正在平滑捲動（搬移選好後會自動帶到下一步），等它停下來再量座標
   const box = await canvas.boundingBox();
   if (!box) throw new Error("canvas not visible");
   const scale = box.width / target.W;

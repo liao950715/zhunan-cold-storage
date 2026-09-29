@@ -75,6 +75,9 @@ export default function SearchBox({ initial = "", onSearch, autoFocus = false, p
         />
         <button className="btn-primary" type="submit"><SearchIcon size={22} />找貨</button>
       </form>
+      {open && q.trim().length > 0 && suggestions.length === 0 && (
+        <p role="status" className="absolute left-0 right-0 z-20 mt-1 rounded-[10px] border border-line bg-white px-4 py-3 text-[17px] text-ink-2 shadow-lg">找不到符合「{q.trim()}」的商品、儲位或批次；可以改字再試，或按 Enter 直接搜尋。</p>
+      )}
       {open && suggestions.length > 0 && (
         <ul id="search-suggestions" role="listbox" className="absolute left-0 right-0 z-20 mt-1 max-h-[420px] overflow-auto rounded-[10px] border border-line bg-white shadow-lg">
           {suggestions.map((s, i) => (

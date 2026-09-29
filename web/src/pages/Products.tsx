@@ -65,21 +65,23 @@ function EditProduct({ product, onDone }: { product: Product; onDone: (msg?: str
   const qc = useQueryClient();
   const [form, setForm] = useState({ name: product.name, category: product.category ?? "", unit: product.unit, lowStockThreshold: product.lowStockThreshold, expiryAlertDays: product.expiryAlertDays, note: product.note ?? "" });
   const m = useMutation({
-    mutationFn: () => patch<Product>(`/products/${product.id}`, { ...form, category: form.category || null, note: form.note || null }),
+    mutationFn: () => patch<Product>(`/products/${product.id}`, { ...form, name: form.name.trim(), unit: form.unit.trim(), category: form.category.trim() || null, note: form.note.trim() || null }),
     onSuccess: async (p) => {
       await qc.invalidateQueries({ queryKey: ["products"] });
       onDone(`已更新商品「${p.name}」`);
     },
   });
+  const nameBlank = form.name.trim().length === 0;
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (nameBlank || form.unit.trim().length === 0) return; // 只有空白不算名稱
     m.mutate();
   }
   return (
     <form onSubmit={submit} className="rounded border border-slate-300 bg-white p-3 space-y-2">
       <p className="font-medium">編輯商品 #{product.id}</p>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-        <Field label="名稱 *"><input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <Field label="名稱 *" hint={form.name.length > 0 && nameBlank ? <span className="text-bad">名稱不能只有空白</span> : undefined}><input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <Field label="類別"><input className="input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
         <Field label="計量單位 *" hint="已有批次的商品不可更改單位"><input className="input" required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} /></Field>
         <Field label="低庫存警戒值"><input type="number" min={0} className="input" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: Number(e.target.value) })} /></Field>
@@ -88,7 +90,7 @@ function EditProduct({ product, onDone }: { product: Product; onDone: (msg?: str
       </div>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
       <div className="flex gap-2">
-        <button type="submit" className="btn-primary" disabled={m.isPending}>儲存</button>
+        <button type="submit" className="btn-primary" disabled={m.isPending || nameBlank || form.unit.trim().length === 0}>儲存</button>
         <button type="button" className="btn" onClick={() => onDone()}>取消</button>
       </div>
     </form>
