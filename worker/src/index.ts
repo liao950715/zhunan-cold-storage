@@ -5,7 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createApp } from "./app.js";
 import { Db } from "./lib/sql.js";
-import { MIGRATE_V1_TO_V2, MIGRATE_V2_TO_V3, MIGRATE_V3_TO_V4, MIGRATE_V4_TO_V5, POST_MIGRATION_SQL, SCHEMA_SQL, SCHEMA_VERSION } from "./db/schema.js";
+import { MIGRATE_V1_TO_V2, MIGRATE_V2_TO_V3, MIGRATE_V3_TO_V4, MIGRATE_V4_TO_V5, MIGRATE_V5_TO_V6, POST_MIGRATION_SQL, SCHEMA_SQL, SCHEMA_VERSION } from "./db/schema.js";
 import { seedBase, seedDemoStock } from "./seed.js";
 
 export interface Env {
@@ -35,6 +35,7 @@ export class WarehouseDO extends DurableObject<Env> {
         if (Number(v.value) < 3) db.tx(() => db.exec(MIGRATE_V2_TO_V3)); // v3：防重送識別碼綁定請求內容
         if (Number(v.value) < 4) db.tx(() => db.exec(MIGRATE_V3_TO_V4)); // v4：盤點差異原因
         if (Number(v.value) < 5) db.tx(() => db.exec(MIGRATE_V4_TO_V5)); // v5：批次進貨時間（先進先出）
+        if (Number(v.value) < 6) db.tx(() => db.exec(MIGRATE_V5_TO_V6)); // v6：盤點附帶報損
       }
       db.exec(POST_MIGRATION_SQL);
       const mode = env.DEMO_MODE === "rich" ? "rich" : "basic";
@@ -45,7 +46,7 @@ export class WarehouseDO extends DurableObject<Env> {
       const resetDemo = async (seedMode: "basic" | "rich" = mode) => {
         // 交易內清空所有業務資料（保留 meta），再重新 seed；使用者也重建（示範帳號）
         db.tx(() => {
-          for (const t of ["IdempotencyKey", "StocktakeItem", "Stocktake", "StockMovement", "Inventory", "LocationCapacity", "Batch", "BatchCounter", "Location", "Rack", "Warehouse", "Product", "PairAttempt", "User"]) db.run(`DELETE FROM ${t}`);
+          for (const t of ["IdempotencyKey", "StocktakeDamage", "StocktakeItem", "Stocktake", "StockMovement", "Inventory", "LocationCapacity", "Batch", "BatchCounter", "Location", "Rack", "Warehouse", "Product", "PairAttempt", "User"]) db.run(`DELETE FROM ${t}`);
           db.run("DELETE FROM sqlite_sequence");
         });
         await seedBase(db);

@@ -173,6 +173,15 @@ BatchCounter（取號）   IdempotencyKey（去重）
 | diff | Int | countedQty − systemQty |
 | UNIQUE(stocktakeId, locationId, batchId) | | |
 
+**StocktakeDamage**（v6，2026-09-30）：盤點過程中按「建立報損」登記的報損與盤點單的關聯，只供追溯與管理員核對。
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| id | Int PK | |
+| stocktakeId | Int FK → Stocktake | |
+| movementId | Int FK → StockMovement, UNIQUE | 該筆 DAMAGE 異動；一筆報損只能附在一張盤點單 |
+
+提交時驗證：必須是 DAMAGE、提交者本人登記、未被復原、未附在其他盤點單。報損當下已扣庫存，提交的 systemQty 是扣完後的數字，核准不會再扣（只調 countedQty − systemQty）。
+
 核准流程（交易內）：逐筆 `Inventory.quantity == systemQty` → 否則 409 全單拒絕；相符則更新為 `countedQty` 並寫 `ADJUSTMENT` 紀錄（quantity=|diff|，方向以 from/to 表示）。
 
 ### 2.12 IdempotencyKey

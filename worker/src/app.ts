@@ -244,7 +244,7 @@ export function createApp(env: AppEnv) {
   app.get("/api/stocktakes", (c) => c.json(q.listStocktakes(db, z.enum(["PENDING", "APPROVED", "REJECTED"]).optional().parse(c.req.query("status")))));
   app.get("/api/stocktakes/baseline", (c) => c.json({ items: q.stocktakeBaseline(db, c.req.query("warehouseId") ? idParam(c.req.query("warehouseId")!, "warehouseId") : undefined) }));
   app.post("/api/stocktakes", async (c) => {
-    const input = z.object({ warehouseId: id.optional(), note: z.string().max(500).nullable().optional(), items: z.array(z.object({ locationId: id, batchId: id, countedQty: z.number().int().min(0), systemQty: z.number().int().min(0).optional(), reasonCode: z.enum(["DAMAGED", "MISSING", "OTHER"]).nullable().optional(), reasonNote: z.string().max(200).nullable().optional() })).min(1, "至少一筆盤點明細") }).parse(await c.req.json());
+    const input = z.object({ warehouseId: id.optional(), note: z.string().max(500).nullable().optional(), items: z.array(z.object({ locationId: id, batchId: id, countedQty: z.number().int().min(0), systemQty: z.number().int().min(0).optional(), reasonCode: z.enum(["DAMAGED", "MISSING", "OTHER"]).nullable().optional(), reasonNote: z.string().max(200).nullable().optional() })).min(1, "至少一筆盤點明細"), damageMovementIds: z.array(id).max(500).optional() }).parse(await c.req.json());
     return c.json(q.submitStocktake(db, input, c.get("user").id), 201);
   });
   app.get("/api/stocktakes/:id", (c) => c.json(q.getStocktake(db, idParam(c.req.param("id")))));

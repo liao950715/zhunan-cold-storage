@@ -10,38 +10,67 @@ import { locationLabel } from "../lib/words";
 
 const REASONS = ["凍傷", "壓損", "腐爛", "包裝破損", "其他"];
 
-/** FR-014 報損：哪個儲位 → 哪一批、多少、原因 → 確認後立即扣庫存。 */
+/** 從盤點帶入的報損內容：儲位與批次固定，數量與原因預填（可改）。 */
+export interface DamagePreset {
+  locationId: number;
+  batchId: number;
+  quantity: number;
+  /** 最多可報損的數量（盤點少掉的數量）；報損超過會讓盤點變成多出來 */
+  maxQuantity: number;
+  reason: string;
+}
+export interface DamageDone { movementId: number; locationCode: string; batchNo: string; productName: string; unit: string; quantity: number; reason: string; after: number }
+
+/** FR-014 報損頁：平常直接進來登記，不需要先盤點。 */
 export default function Damage() {
   const [params] = useSearchParams();
+  return <DamageFlow initialLocationId={Number(params.get("locationId")) || null} />;
+}
+
+/**
+ * 報損流程：哪個儲位 → 哪一批、多少、原因 → 確認後立即扣庫存。
+ * 有 preset 時是「盤點中建立報損」：儲位、批次鎖定，完成後呼叫 onDone 回到盤點（不顯示完成頁）。
+ */
+export function DamageFlow({ initialLocationId = null, preset, onDone, onCancel }: { initialLocationId?: number | null; preset?: DamagePreset; onDone?: (r: DamageDone) => void; onCancel?: () => void }) {
   const invalidate = useInvalidateStock();
-  const [locId, setLocId] = useState<number | null>(Number(params.get("locationId")) || null);
-  const [batchId, setBatchId] = useState<number | null>(null);
-  const [quantity, setQuantity] = useState(0);
-  const [reason, setReason] = useState("");
+  const [locId, setLocId] = useState<number | null>(preset?.locationId ?? initialLocationId);
+  const [batchId, setBatchId] = useState<number | null>(preset?.batchId ?? null);
+  const [quantity, setQuantity] = useState(preset?.quantity ?? 0);
+  const [reason, setReason] = useState(preset?.reason ?? "");
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
 
   const loc = useQuery({ queryKey: ["location", locId], queryFn: () => get<LocationDetail>(`/locations/${locId}`), enabled: !!locId });
-  const line = loc.data?.lines.find((l) => l.batch.id === batchId) ?? (loc.data?.lines.length === 1 ? loc.data.lines[0] : null);
+  const line = preset
+    ? loc.data?.lines.find((l) => l.batch.id === preset.batchId) ?? null
+    : loc.data?.lines.find((l) => l.batch.id === batchId) ?? (loc.data?.lines.length === 1 ? loc.data.lines[0] : null);
   if (line && batchId !== line.batch.id) setBatchId(line.batch.id);
-  const history = useQuery({ queryKey: ["movements", "DAMAGE"], queryFn: () => get<{ items: Movement[] }>("/movements?type=DAMAGE&limit=10") });
-  const ok = !!line && quantity > 0 && quantity <= line.quantity && reason.trim().length > 0;
+  const maxQty = line ? Math.min(line.quantity, preset?.maxQuantity ?? line.quantity) : 0;
+  const history = useQuery({ queryKey: ["movements", "DAMAGE"], queryFn: () => get<{ items: Movement[] }>("/movements?type=DAMAGE&limit=10"), enabled: !preset });
+  const ok = !!line && quantity > 0 && quantity <= maxQty && reason.trim().length > 0;
+  const overMessage = line && preset && maxQty < line.quantity ? `盤點只少了 ${maxQty} ${line.product.unit}，最多報損 ${maxQty} ${line.product.unit}` : line ? `最多只能報損 ${maxQty} ${line.product.unit}` : "";
   const stepText = (() => {
     if (!locId) return "哪個儲位的貨壞了？請用下拉選，或直接點圖上有貨的格子";
+    if (preset && loc.data && !line) return "這個儲位的這一批已經沒有庫存了，請回到盤點";
     if (loc.data && loc.data.lines.length === 0) return "這個儲位沒有貨，請選別的儲位";
     if (!line) return "請選是哪一批";
     if (quantity <= 0) return `請填報損數量（單位：${line.product.unit}）`;
-    if (quantity > line.quantity) return `最多只能報損 ${line.quantity} ${line.product.unit}，請改小`;
+    if (quantity > maxQty) return `${overMessage}，請改小`;
     if (!reason.trim()) return "請選原因（或選「其他」後說明）";
-    return "請按「下一步：核對並報損」";
+    return preset ? "已從盤點帶入，請核對數量與原因，再按「下一步：核對並報損」" : "請按「下一步：核對並報損」";
   })();
 
   const m = useMutation({
-    mutationFn: () => post<{ batchNo: string; locationCode: string; after: number }>("/stock/damage", { batchId: line!.batch.id, locationId: locId, quantity, reason: reason.trim() }, idemKey),
+    // 盤點中建立的報損在原因後註記，異動紀錄看得出來源
+    mutationFn: () => post<{ movementId: number; batchNo: string; locationCode: string; after: number }>("/stock/damage", { batchId: line!.batch.id, locationId: locId, quantity, reason: preset ? `${reason.trim()}（盤點時發現）` : reason.trim() }, idemKey),
     onSuccess: async (r) => {
-      setResult(`${line!.product.name} ${quantity} ${line!.product.unit} 已報損（${r.locationCode}，原因：${reason}）。該儲位剩 ${r.after} ${line!.product.unit}。`);
       await invalidate();
+      if (onDone) {
+        onDone({ movementId: r.movementId, locationCode: r.locationCode, batchNo: r.batchNo, productName: line!.product.name, unit: line!.product.unit, quantity, reason: reason.trim(), after: r.after });
+        return;
+      }
+      setResult(`${line!.product.name} ${quantity} ${line!.product.unit} 已報損（${r.locationCode}，原因：${reason}）。該儲位剩 ${r.after} ${line!.product.unit}。`);
       setIdemKey(crypto.randomUUID());
       setConfirming(false); setQuantity(0); setReason(""); setBatchId(null);
     },
@@ -61,7 +90,7 @@ export default function Damage() {
     return (
       <div className="space-y-5">
         <PageTitle>確認報損</PageTitle>
-        <StepBanner>請核對，按「確認報損」會立即扣除庫存，無法取消</StepBanner>
+        <StepBanner>請核對，按「確認報損」會立即扣除庫存，無法取消{preset ? "；完成後自動回到盤點" : ""}</StepBanner>
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{line.product.name}，報損 {quantity} {line.product.unit}</p>
           <p className="text-[22px]">在 <b>{locationLabel(loc.data.location.code)}</b></p>
@@ -76,31 +105,37 @@ export default function Damage() {
 
   return (
     <div className="space-y-5">
-      <PageTitle sub="登記損壞的貨；確認後立即從庫存扣除並留下紀錄">報損</PageTitle>
+      {preset
+        ? <PageTitle sub="盤點時發現腐爛／損壞：商品、批次、儲位、數量與原因已帶入；確認後立即扣庫存，再回到盤點">從盤點建立報損</PageTitle>
+        : <PageTitle sub="登記損壞的貨；確認後立即從庫存扣除並留下紀錄">報損</PageTitle>}
       <StepBanner>{stepText}</StepBanner>
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
       <Step n={1} title="哪個儲位的貨？" done={!!loc.data && loc.data.lines.length > 0}>
-        <LocationPicker value={locId} mode="stocked" label="報損的儲位" onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); setQuantity(0); }} />
-        {loc.data && loc.data.lines.length === 0 && <p className="mt-2 text-warn">這個儲位沒有貨。</p>}
+        {preset
+          ? <p className="text-[20px]"><b>{loc.data ? locationLabel(loc.data.location.code) : "讀取中…"}</b><span className="muted ml-2">（從盤點帶入）</span></p>
+          : <LocationPicker value={locId} mode="stocked" label="報損的儲位" onChange={(l) => { setLocId(l?.id ?? null); setBatchId(null); setQuantity(0); }} />}
+        {!preset && loc.data && loc.data.lines.length === 0 && <p className="mt-2 text-warn">這個儲位沒有貨。</p>}
       </Step>
-      <Step n={2} title="哪一批、多少？" done={!!line && quantity > 0 && quantity <= line.quantity}>
-        {!loc.data || loc.data.lines.length === 0 ? <p className="muted">請先選儲位。</p> : (
+      <Step n={2} title="哪一批、多少？" done={!!line && quantity > 0 && quantity <= maxQty}>
+        {preset && loc.data && !line ? <p className="text-warn">這個儲位的這一批已經沒有庫存了，請回到盤點重新清點這一格。</p>
+        : !loc.data || loc.data.lines.length === 0 ? <p className="muted">請先選儲位。</p> : (
           <div className="space-y-3">
-            {loc.data.lines.length > 1 && loc.data.lines.map((l) => (
+            {!preset && loc.data.lines.length > 1 && loc.data.lines.map((l) => (
               <label key={l.inventoryId} className={`flex min-h-[52px] items-center gap-3 rounded-[10px] border px-4 text-[18px] ${batchId === l.batch.id ? "border-brand bg-brand-soft" : "border-line"}`}>
                 <input type="radio" name="batch" className="h-5 w-5" checked={batchId === l.batch.id} onChange={() => setBatchId(l.batch.id)} />
                 <span className="font-bold">{l.product.name} {l.quantity} {l.product.unit}</span>
                 <span className="muted ml-auto">到期 {fmtDate(l.batch.expiryDate)}・批次 {l.batch.batchNo}</span>
               </label>
             ))}
+            {preset && line && <p className="text-[20px]"><b>{line.product.name}</b><span className="muted ml-2">批次 {line.batch.batchNo}・到期 {fmtDate(line.batch.expiryDate)}</span></p>}
             {line && (
-              <div className="flex items-center gap-3">
-                <input type="number" min={1} max={line.quantity} inputMode="numeric" className="input mt-0 max-w-[200px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="報損數量" />
+              <div className="flex flex-wrap items-center gap-3">
+                <input type="number" min={1} max={maxQty} inputMode="numeric" className="input mt-0 max-w-[200px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="報損數量" />
                 <span className="text-[24px] font-bold">{line.product.unit}</span>
-                <span className="muted">這裡有 {line.quantity} {line.product.unit}</span>
+                <span className="muted">這裡有 {line.quantity} {line.product.unit}{preset ? `，盤點少了 ${preset.maxQuantity} ${line.product.unit}` : ""}</span>
               </div>
             )}
-            {line && quantity > line.quantity && <p className="text-bad">最多只能報損 {line.quantity} {line.product.unit}。</p>}
+            {line && quantity > maxQty && <p className="text-bad">{overMessage}。</p>}
           </div>
         )}
       </Step>
@@ -114,18 +149,23 @@ export default function Damage() {
       </Step>
       <Step n={4} title="確認報損">
         {ok ? <p className="text-[20px]"><b>{line!.product.name}</b> {quantity} {line!.product.unit}，{loc.data!.location.code}，原因：{reason}</p> : <p className="text-warn">請先完成上面的步驟。</p>}
-        <button type="button" className="btn-primary mt-4 w-full sm:w-auto" disabled={!ok} onClick={() => setConfirming(true)}>下一步：核對並報損</button>
-      </Step>
-      <Card title="最近報損">
-        {history.data?.items.length === 0 && <p className="muted">尚無報損紀錄</p>}
-        <div className="divide-y divide-line">
-          {history.data?.items.map((mv) => (
-            <div key={mv.id} className="flex flex-wrap items-center gap-3 py-3">
-              <div className="flex-1"><p className="text-[20px] font-bold">{mv.productNameSnapshot} −{mv.quantity} {mv.product.unit}<span className="ml-2 font-normal text-ink-2">{mv.locationCodeSnapshot}</span></p><p className="muted">{mv.reason}・{mv.operator.displayName}・{fmtTime(mv.createdAt)}</p></div>
-            </div>
-          ))}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {onCancel && <button type="button" className="btn" onClick={onCancel}>取消，回到盤點</button>}
+          <button type="button" className="btn-primary w-full sm:w-auto" disabled={!ok} onClick={() => setConfirming(true)}>下一步：核對並報損</button>
         </div>
-      </Card>
+      </Step>
+      {!preset && (
+        <Card title="最近報損">
+          {history.data?.items.length === 0 && <p className="muted">尚無報損紀錄</p>}
+          <div className="divide-y divide-line">
+            {history.data?.items.map((mv) => (
+              <div key={mv.id} className="flex flex-wrap items-center gap-3 py-3">
+                <div className="flex-1"><p className="text-[20px] font-bold">{mv.productNameSnapshot} −{mv.quantity} {mv.product.unit}<span className="ml-2 font-normal text-ink-2">{mv.locationCodeSnapshot}</span></p><p className="muted">{mv.reason}・{mv.operator.displayName}・{fmtTime(mv.createdAt)}</p></div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

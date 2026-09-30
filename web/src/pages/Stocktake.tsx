@@ -7,6 +7,7 @@ import { todayStr } from "../api/hooks";
 import { useAuth } from "../auth/AuthContext";
 import { Card, Message, PageTitle, StepBanner, fmtDate, fmtReceived, fmtTime } from "../components/ui";
 import { useDialog } from "../components/ConfirmDialog";
+import { DamageFlow, type DamageDone, type DamagePreset } from "./Damage";
 
 const STATUS: Record<StocktakeT["status"], string> = { PENDING: "待核准", APPROVED: "已核准", REJECTED: "已退回" };
 
@@ -64,6 +65,7 @@ export default function Stocktake() {
                   <p className="text-ink-2">提交：{s.submittedBy.displayName}・{fmtTime(s.submittedAt)}</p>
                   {s.reviewedBy && <p className="text-ink-2 sm:col-span-2">審核：{s.reviewedBy.displayName}・{fmtTime(s.reviewedAt!)}{s.reviewNote && <>・「{s.reviewNote}」</>}</p>}
                   {s.note && <p className="text-ink-2 sm:col-span-2">備註：{s.note}</p>}
+                  {!!s.damages?.length && <p className="sm:col-span-2">盤點中已報損 <b>{s.damages.length}</b> 筆（報損時已扣庫存，核准不會再扣）</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="btn" aria-expanded={open === s.id} onClick={() => setOpen(open === s.id ? null : s.id)}>{open === s.id ? "收合明細" : "看明細"}</button>
@@ -85,6 +87,14 @@ export default function Stocktake() {
                         {i.diff !== 0 && <span className="basis-full text-[17px] font-normal">原因：<b>{i.reason ?? "（未填）"}</b></span>}
                       </div>
                     ))}
+                    {!!s.damages?.length && (
+                      <div className="space-y-1 py-2">
+                        <p className="text-[18px] font-bold">盤點中已報損（報損時已扣庫存，上面的系統數量已是扣完的數字，核准不會再扣）</p>
+                        {s.damages.map((d) => (
+                          <p key={d.movementId} className="text-[17px]">{d.locationCode}　{d.product.name} −{d.quantity} {d.product.unit}<span className="ml-2 text-ink-2">批次 {d.batchNo}・{d.reason}・{fmtTime(d.createdAt)}{d.reversalId ? "・已復原" : ""}</span></p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </section>
@@ -103,6 +113,10 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [reasons, setReasons] = useState<Record<string, { code: StocktakeReasonCode | null; note: string }>>({});
   const [note, setNote] = useState("");
+  // 盤點中按「建立報損」：damaging＝正在報損的那一格；damages＝本次盤點已完成的報損（提交時附上供核對）
+  const [damaging, setDamaging] = useState<DamagePreset | null>(null);
+  const [damages, setDamages] = useState<Array<DamageDone & { key: string }>>([]);
+  const [info, setInfo] = useState<string | null>(null);
   const baseline = useQuery({ queryKey: ["stocktakeBaseline", warehouseId], queryFn: () => get<{ items: BaselineItem[] }>(`/stocktakes/baseline${warehouseId ? `?warehouseId=${warehouseId}` : ""}`) });
   const key = (b: BaselineItem) => `${b.locationId}:${b.batchId}`;
   const counted = (b: BaselineItem) => counts[key(b)] ?? b.systemQty;
@@ -113,7 +127,7 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
   const today = todayStr();
 
   const submit = useMutation({
-    mutationFn: () => post<{ id: number }>("/stocktakes", { warehouseId: warehouseId ?? undefined, note: note || null, items: baseline.data!.items.map((b) => {
+    mutationFn: () => post<{ id: number }>("/stocktakes", { warehouseId: warehouseId ?? undefined, note: note || null, damageMovementIds: damages.map((d) => d.movementId), items: baseline.data!.items.map((b) => {
       const diff = counted(b) !== b.systemQty;
       return { locationId: b.locationId, batchId: b.batchId, countedQty: counted(b), systemQty: b.systemQty, reasonCode: diff ? reasonOf(b).code : null, reasonNote: diff ? reasonOf(b).note.trim() || null : null };
     }) }),
@@ -121,10 +135,30 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
   });
   const diffs = baseline.data?.items.filter((b) => counted(b) !== b.systemQty).length ?? 0;
   const missingReasons = baseline.data?.items.filter(reasonMissing).length ?? 0;
+  const damagedOf = (b: BaselineItem) => damages.filter((d) => d.key === key(b)).reduce((sum, d) => sum + d.quantity, 0);
+
+  const startDamage = (b: BaselineItem, shortage: number) => {
+    setInfo(null);
+    setDamaging({ locationId: b.locationId, batchId: b.batchId, quantity: shortage, maxQuantity: shortage, reason: "腐爛" });
+    window.scrollTo(0, 0);
+  };
+  // 報損完成：庫存已扣、基準重新讀取 → 這一格的系統數量變成扣完的數字，差異自動只剩沒報損的部分
+  const finishDamage = async (r: DamageDone) => {
+    const k = `${damaging!.locationId}:${damaging!.batchId}`;
+    setDamages((ds) => [...ds, { ...r, key: k }]);
+    setReasons((rs) => { const next = { ...rs }; delete next[k]; return next; }); // 若還有差異，要重新選原因
+    setDamaging(null);
+    setInfo(`已報損 ${r.productName} ${r.quantity} ${r.unit}（${r.locationCode}，原因：${r.reason}），庫存已扣除。這一格的系統數量已更新為 ${r.after} ${r.unit}，盤點差異只算沒報損的部分，不會重複扣。請繼續盤點。`);
+    await baseline.refetch();
+    requestAnimationFrame(() => document.getElementById(`st-line-${k}`)?.scrollIntoView({ block: "center" }));
+  };
+
+  if (damaging) return <DamageFlow preset={damaging} onDone={finishDamage} onCancel={() => setDamaging(null)} />;
 
   return (
     <>
     <StepBanner>{baseline.data && baseline.data.items.length === 0 ? "此範圍沒有庫存可盤點，請換範圍" : diffs === 0 ? "請逐格填實盤數量，相符的不用改；填完按「提交盤點」" : missingReasons > 0 ? `有 ${missingReasons} 筆數量與系統不同，請在那一筆下方選擇差異原因` : `${diffs} 筆與系統不同、原因都選好了；確認後按「提交盤點」，提交後要等管理員核准`}</StepBanner>
+    {info && <Message kind="ok">{info}</Message>}
     <Card title="新盤點：填入實際清點數量（預設為系統數量）">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
         範圍：
@@ -139,10 +173,11 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
           const c = counted(b);
           const d = c - b.systemQty;
           return (
-            <div key={key(b)} className={`flex flex-wrap items-center gap-3 py-3 ${d !== 0 ? "-mx-2 rounded-[10px] bg-warn-soft/40 px-2" : ""}`}>
+            <div key={key(b)} id={`st-line-${key(b)}`} className={`flex flex-wrap items-center gap-3 py-3 ${d !== 0 ? "-mx-2 rounded-[10px] bg-warn-soft/40 px-2" : ""}`}>
               <div className="min-w-[200px] flex-1">
                 <p className="text-[20px] font-bold">{b.locationCode}　{b.product.name}{b.expiryDate < today && <span className="tag-bad ml-2 align-middle">已過期，請檢查是否腐爛</span>}</p>
                 <p className="muted">系統數量 <b className="text-ink">{b.systemQty} {b.product.unit}</b>・進貨 {fmtReceived(b.receivedAt, b.receivedDate)}・到期 {fmtDate(b.expiryDate)}・批次 {b.batchNo}</p>
+                {damagedOf(b) > 0 && <p className="text-[17px] font-bold text-ok">✓ 盤點中已報損 {damagedOf(b)} {b.product.unit}（已扣庫存，系統數量已是扣完的數字）</p>}
               </div>
               <label className="flex items-center gap-2 text-[18px]">實盤
                 <input type="number" min={0} inputMode="numeric" className="input mt-0 w-28 text-right text-[22px] font-bold" value={c} onChange={(e) => setCounts({ ...counts, [key(b)]: Number(e.target.value) })} aria-label={`${b.locationCode} 實盤數量`} />
@@ -166,6 +201,12 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
                   {reasonOf(b).code === "OTHER" && (
                     <input className="input mt-0" placeholder="請說明原因（必填）" value={reasonOf(b).note} onChange={(e) => setReason(b, { note: e.target.value })} aria-label={`${b.locationCode} 其他原因說明`} />
                   )}
+                  {reasonOf(b).code === "DAMAGED" && d < 0 && (
+                    <div className="flex flex-wrap items-center gap-3 rounded-[10px] bg-warn-soft/60 p-3">
+                      <button type="button" className="btn-primary" aria-label={`${b.locationCode} 建立報損`} onClick={() => startDamage(b, -d)}>建立報損</button>
+                      <span className="min-w-0 flex-1 text-[16px]">壞掉的 {-d} {b.product.unit} 要丟掉，就直接報損（商品、批次、儲位、數量、原因自動帶入）；報損立即扣庫存，完成後回到這裡繼續盤點，這一格不會再重複扣。</span>
+                    </div>
+                  )}
                   {reasonMissing(b) && <p className="text-[16px] text-warn">數量與系統不同，要選原因才能提交。</p>}
                 </div>
               )}
@@ -174,10 +215,16 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
         })}
         {baseline.data?.items.length === 0 && <p className="muted py-2">此範圍沒有庫存可盤點</p>}
       </div>
+      {damages.length > 0 && (
+        <div className="mt-3 space-y-1 rounded-[10px] border border-line p-3">
+          <p className="text-[18px] font-bold">本次盤點已報損 {damages.length} 筆（已扣庫存，提交時一併附上給管理員核對）</p>
+          {damages.map((d) => <p key={d.movementId} className="text-[17px]">{d.locationCode}　{d.productName} −{d.quantity} {d.unit}<span className="ml-2 text-ink-2">批次 {d.batchNo}・{d.reason}</span></p>)}
+        </div>
+      )}
       {submit.error && <Message kind="error">{errorMessage(submit.error)}</Message>}
       <div className="mt-3 flex items-center gap-3">
         <span className="text-[18px] text-ink-2">{diffs} 筆有差異{missingReasons > 0 ? `，${missingReasons} 筆還沒選原因` : ""}</span>
-        <button className="btn-primary ml-auto" disabled={!baseline.data?.items.length || submit.isPending || missingReasons > 0} onClick={async () => { if (await dialog.confirm("提交盤點", `${baseline.data!.items.length} 筆明細，${diffs} 筆差異。\n提交後不會立即改庫存，需管理員核准。`)) submit.mutate(); }}>提交盤點</button>
+        <button className="btn-primary ml-auto" disabled={!baseline.data?.items.length || baseline.isFetching || submit.isPending || missingReasons > 0} onClick={async () => { if (await dialog.confirm("提交盤點", `${baseline.data!.items.length} 筆明細，${diffs} 筆差異。${damages.length ? `\n盤點中已報損 ${damages.length} 筆（已扣庫存，核准不會再扣）。` : ""}\n提交後不會立即改庫存，需管理員核准。`)) submit.mutate(); }}>提交盤點</button>
       </div>
     </Card>
     </>

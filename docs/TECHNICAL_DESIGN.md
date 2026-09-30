@@ -216,6 +216,8 @@ zhunan-cold-storage/
 
 **盤點提交** `POST /api/stocktakes` `{ warehouseId?, items: [ { locationId, batchId, countedQty } ], note }` → 後端自動填入每筆 `systemQty`（提交當下庫存）與 `diff`。
 
+**盤點中建立報損**（2026-09-30）：前端在「腐爛／損壞」差異列提供「建立報損」，沿用 `POST /api/stock/damage`（立即扣庫存，原因註記「盤點時發現」），完成後重新讀取盤點基準；提交時帶 `damageMovementIds: number[]`，後端寫入 `StocktakeDamage` 關聯（須為本人、未復原、未被其他盤點單使用）。庫存只在報損時扣一次，核准沿用基準比對，只調剩餘差異。
+
 **核准** `POST /api/stocktakes/:id/approve` → 逐筆比對 `systemQty` 與目前庫存；任一不符 → `409 STOCKTAKE_CONFLICT`（回傳衝突明細），全部相符才寫入 ADJUSTMENT 並更新庫存。
 
 ---

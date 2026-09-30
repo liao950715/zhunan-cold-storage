@@ -231,6 +231,20 @@ export interface Stocktake {
   reviewedBy: { id: number; displayName: string } | null;
   reviewNote: string | null;
   items: StocktakeItem[];
+  /** 盤點過程中按「建立報損」登記的報損（報損當下已扣庫存，核准不會再扣） */
+  damages?: StocktakeDamage[];
+}
+
+export interface StocktakeDamage {
+  movementId: number;
+  locationCode: string;
+  batchNo: string;
+  product: { name: string; unit: string };
+  quantity: number;
+  reason: string | null;
+  createdAt: string;
+  /** 已被復原時為復原紀錄 id */
+  reversalId: number | null;
 }
 
 export interface BaselineItem {

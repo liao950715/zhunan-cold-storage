@@ -177,8 +177,15 @@ function serializeStocktake(db: Db, s: Record<string, unknown>) {
      FROM StocktakeItem si JOIN Location l ON l.id = si.locationId JOIN Batch b ON b.id = si.batchId JOIN Product p ON p.id = b.productId WHERE si.stocktakeId = ? ORDER BY l.code`, s.id);
   const user = (id: unknown) => (id ? db.one<{ id: number; displayName: string }>("SELECT id, displayName FROM User WHERE id = ?", id) : null);
   const warehouse = s.warehouseId ? db.one<{ id: number; code: string; name: string }>("SELECT id, code, name FROM Warehouse WHERE id = ?", s.warehouseId) : null;
+  // 盤點時已報損（報損當下已扣庫存；核准不會再扣）
+  const damages = db.all<{ movementId: number; quantity: number; reason: string | null; createdAt: string; locationCode: string; productName: string; batchNo: string; unit: string; reversalId: number | null }>(
+    `SELECT m.id AS movementId, m.quantity, m.reason, m.createdAt, m.locationCodeSnapshot AS locationCode, m.productNameSnapshot AS productName, b.batchNo, p.unit,
+       (SELECT r.id FROM StockMovement r WHERE r.reversalOfId = m.id) AS reversalId
+     FROM StocktakeDamage sd JOIN StockMovement m ON m.id = sd.movementId JOIN Batch b ON b.id = m.batchId JOIN Product p ON p.id = m.productId
+     WHERE sd.stocktakeId = ? ORDER BY m.id`, s.id);
   return {
     ...s, warehouse, submittedBy: user(s.submittedById), reviewedBy: user(s.reviewedById),
+    damages: damages.map((d) => ({ movementId: d.movementId, locationCode: d.locationCode, batchNo: d.batchNo, product: { name: d.productName, unit: d.unit }, quantity: d.quantity, reason: d.reason, createdAt: d.createdAt, reversalId: d.reversalId })),
     items: items.map((i) => ({ id: i.id, locationId: i.locationId, locationCode: i.locationCode, batchId: i.batchId, batchNo: i.batchNo, receivedDate: i.receivedDate, receivedAt: i.receivedAt, expiryDate: i.expiryDate, product: { id: i.productId, name: i.productName, unit: i.unit }, systemQty: i.systemQty, countedQty: i.countedQty, diff: i.diff, reasonCode: i.reasonCode, reasonNote: i.reasonNote, reason: i.diff === 0 ? null : stocktakeReasonText(i.reasonCode, i.reasonNote) })),
   };
 }
@@ -192,8 +199,12 @@ export function getStocktake(db: Db, id: number) {
   if (!s) throw notFound("盤點單");
   return serializeStocktake(db, s);
 }
-/** 提交只建立待核准單（不改庫存）；記錄提交當下 systemQty 作核准基準（AT-24）。 */
-export function submitStocktake(db: Db, input: { warehouseId?: number; note?: string | null; items: Array<{ locationId: number; batchId: number; countedQty: number; systemQty?: number; reasonCode?: string | null; reasonNote?: string | null }> }, operatorId: number) {
+/**
+ * 提交只建立待核准單（不改庫存）；記錄提交當下 systemQty 作核准基準（AT-24）。
+ * damageMovementIds：盤點過程中按「建立報損」登記的報損（已扣庫存，systemQty 已是扣完的數字），
+ * 只記關聯供管理員核對；庫存只在報損時扣一次，核准時的調整量＝實盤 − 扣完後的系統量。
+ */
+export function submitStocktake(db: Db, input: { warehouseId?: number; note?: string | null; items: Array<{ locationId: number; batchId: number; countedQty: number; systemQty?: number; reasonCode?: string | null; reasonNote?: string | null }>; damageMovementIds?: number[] }, operatorId: number) {
   const keys = input.items.map((i) => `${i.locationId}:${i.batchId}`);
   if (new Set(keys).size !== keys.length) throw new AppError("VALIDATION_ERROR", 400, "同一儲位＋批次不可重複盤點");
   return db.tx(() => {
@@ -226,6 +237,15 @@ export function submitStocktake(db: Db, input: { warehouseId?: number; note?: st
         if (reasonCode === "OTHER" && !reasonNote) throw new AppError("STOCKTAKE_REASON_REQUIRED", 400, `無法提交：儲位 ${loc.code} 選了「其他」，請填寫說明。`, { locationId: i.locationId, batchId: i.batchId, diff });
       }
       db.run("INSERT INTO StocktakeItem (stocktakeId, locationId, batchId, systemQty, countedQty, diff, reasonCode, reasonNote) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, i.locationId, i.batchId, systemQty, i.countedQty, diff, reasonCode, reasonNote);
+    }
+    for (const movementId of new Set(input.damageMovementIds ?? [])) {
+      const m = db.one<{ type: string; operatorId: number }>("SELECT type, operatorId FROM StockMovement WHERE id = ?", movementId);
+      if (!m || m.type !== "DAMAGE") throw new AppError("VALIDATION_ERROR", 400, `異動 #${movementId} 不是報損紀錄，不能附在盤點單。`, { movementId });
+      if (m.operatorId !== operatorId) throw new AppError("CONFLICT", 409, `報損 #${movementId} 不是您登記的，不能附在您的盤點單。`, { movementId });
+      if (db.one("SELECT 1 FROM StockMovement WHERE reversalOfId = ?", movementId)) throw new AppError("CONFLICT", 409, `報損 #${movementId} 已被復原，不能附在盤點單。請重新整理後再清點這一格。`, { movementId });
+      const linked = db.one<{ stocktakeId: number }>("SELECT stocktakeId FROM StocktakeDamage WHERE movementId = ?", movementId);
+      if (linked) throw new AppError("CONFLICT", 409, `報損 #${movementId} 已附在盤點 #${linked.stocktakeId}，同一筆報損不能重複計算。`, { movementId, stocktakeId: linked.stocktakeId });
+      db.run("INSERT INTO StocktakeDamage (stocktakeId, movementId) VALUES (?, ?)", id, movementId);
     }
     return getStocktake(db, id);
   });

@@ -2,7 +2,7 @@
  * 資料表定義（對應 docs/DATABASE_DESIGN.md）。
  * 在 Durable Object 的 SQLite 內執行；Inventory.quantity 的 CHECK 是最後防線。
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -144,6 +144,15 @@ CREATE TABLE IF NOT EXISTS StocktakeItem (
   UNIQUE (stocktakeId, locationId, batchId)
 );
 
+-- 盤點時順手建立的報損（v6）：報損當下已扣庫存，盤點基準隨之更新；這裡只記錄關聯供追溯，核准時不再扣。
+-- movementId UNIQUE ＝ 一筆報損只能附在一張盤點單。新表用 IF NOT EXISTS，舊資料庫啟動時自動補建。
+CREATE TABLE IF NOT EXISTS StocktakeDamage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stocktakeId INTEGER NOT NULL REFERENCES Stocktake(id),
+  movementId INTEGER NOT NULL UNIQUE REFERENCES StockMovement(id)
+);
+CREATE INDEX IF NOT EXISTS StocktakeDamage_stocktake ON StocktakeDamage(stocktakeId);
+
 CREATE TABLE IF NOT EXISTS IdempotencyKey (
   key TEXT PRIMARY KEY,
   userId INTEGER NOT NULL REFERENCES User(id),
@@ -188,6 +197,11 @@ UPDATE meta SET value = '2' WHERE key = 'schemaVersion';
 
 /** 所有遷移跑完之後才建立的索引（依賴新欄位）。 */
 export const POST_MIGRATION_SQL = `CREATE INDEX IF NOT EXISTS Batch_product_received ON Batch(productId, receivedAt);`;
+
+/** v5 → v6：盤點附帶報損（StocktakeDamage 是新表，SCHEMA_SQL 已建立；這裡只更新版本號）。 */
+export const MIGRATE_V5_TO_V6 = `
+UPDATE meta SET value = '6' WHERE key = 'schemaVersion';
+`;
 
 /**
  * v4 → v5：批次加上精確的進貨時間（出庫改為先進先出）。
