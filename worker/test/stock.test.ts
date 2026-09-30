@@ -76,27 +76,27 @@ describe("Stage 2 庫存交易（Durable Object SQLite）", () => {
     });
   });
 
-  describe("出庫與 FEFO", () => {
-    it("AT-11：FEFO 建議依到期日排序，人工改選其他批次仍可出庫", async () => {
-      await inbound30();
-      const early = await c.post("/api/stock/inbound", { productId: cabbage.id, quantity: 5, expiryDate: "2026-10-15", allocations: [{ locationId: A0105, quantity: 5 }] });
+  describe("出庫與先進先出（FIFO）", () => {
+    it("AT-11：建議依進貨時間由早到晚（不看到期日），人工改選其他批次仍可出庫", async () => {
+      // 較晚進貨、但較早到期的批次 → FIFO 仍排在後面
+      const older = await c.post("/api/stock/inbound", { productId: cabbage.id, quantity: 30, expiryDate: "2026-12-31", receivedAt: "2026-09-01T09:15:00+08:00", allocations: [{ locationId: A0103, quantity: 20 }, { locationId: A0104, quantity: 10 }] });
+      const newer = await c.post("/api/stock/inbound", { productId: cabbage.id, quantity: 5, expiryDate: "2026-10-15", allocations: [{ locationId: A0105, quantity: 5 }] });
       const sug = await c.post("/api/stock/outbound/suggest", { productId: cabbage.id, quantity: 8 });
       expect(sug.status).toBe(200);
       expect(sug.body.shortage).toBe(0);
-      expect(sug.body.suggestions[0]).toMatchObject({ batchNo: early.body.batch.batchNo, take: 5, expired: false });
-      expect(sug.body.suggestions[1]).toMatchObject({ locationCode: "A-01-03", take: 3 });
-      const later = sug.body.suggestions[1].batchId;
-      await c.post("/api/stock/outbound", { productId: cabbage.id, lines: [{ batchId: later, locationId: A0104, quantity: 8 }] }).expect(201);
-      expect(await locQty(c, A0104)).toBe(2);
-      expect(await locQty(c, A0105)).toBe(5);
+      expect(sug.body.suggestions[0]).toMatchObject({ batchNo: older.body.batch.batchNo, locationCode: "A-01-03", take: 8, expired: false });
+      expect(sug.body.suggestions.at(-1)).toMatchObject({ batchNo: newer.body.batch.batchNo, take: 0 });
+      await c.post("/api/stock/outbound", { productId: cabbage.id, lines: [{ batchId: newer.body.batch.id, locationId: A0105, quantity: 2 }] }).expect(201);
+      expect(await locQty(c, A0105)).toBe(3);
     });
 
-    it("FEFO：已過期批次仍列出並標記 expired（Q6）", async () => {
+    it("已過期批次仍列出並標記 expired（Q6），但不自動安排出庫", async () => {
       // 已過期的貨不能再經 API 入庫；這裡模擬「入庫後放到過期」：直接把批次到期日改成過去
       const r = await c.post("/api/stock/inbound", { productId: cabbage.id, quantity: 2, expiryDate: "2026-12-31", allocations: [{ locationId: A0103, quantity: 2 }] }).expect(201);
       await runInDurableObject(env.WAREHOUSE.get(env.WAREHOUSE.idFromName("main")), async (_i, state) => { state.storage.sql.exec("UPDATE Batch SET expiryDate = '2020-01-01' WHERE id = ?", r.body.batch.id); });
       const sug = await c.post("/api/stock/outbound/suggest", { productId: cabbage.id, quantity: 1 });
-      expect(sug.body.suggestions[0].expired).toBe(true);
+      expect(sug.body.suggestions[0]).toMatchObject({ expired: true, take: 0 });
+      expect(sug.body.shortage).toBe(1); // 只剩過期的貨 → 不足
     });
 
     it("AT-12：超額出庫 → 409 INSUFFICIENT_STOCK；多筆明細其中一筆超額則全部回滾", async () => {

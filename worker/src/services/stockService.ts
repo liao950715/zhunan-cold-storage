@@ -5,7 +5,7 @@
 import type { Db } from "../lib/sql.js";
 import { AppError, notFound, validation } from "../lib/errors.js";
 import { nextBatchNo } from "../lib/batchNumber.js";
-import { todayString } from "../lib/dates.js";
+import { daysBetween, taipeiDateOf, todayString } from "../lib/dates.js";
 
 export interface Ctx {
   operator: { id: number };
@@ -135,7 +135,8 @@ function runStockTx<T>(db: Db, ctx: Ctx, fn: () => T): T {
 // ---------- 入庫（FR-008～010） ----------
 
 export interface InboundInput {
-  productId: number; quantity: number; expiryDate: string; receivedDate?: string; note?: string | null;
+  /** receivedAt：進貨時間（ISO）。沒給就是「現在」。receivedDate 為舊介面：非今天時記為當天 08:00。 */
+  productId: number; quantity: number; expiryDate: string; receivedDate?: string; receivedAt?: string; note?: string | null;
   allocations: Array<{ locationId: number; quantity: number }>;
 }
 
@@ -155,17 +156,28 @@ export function inbound(db: Db, input: InboundInput, ctx: Ctx) {
 
     // 先全部驗證，再寫入（AT-05 無部分更新）
     const locs = input.allocations.map((a) => ensureCanAdd(db, a.locationId, product, a.quantity));
-    const receivedDate = input.receivedDate ?? todayString();
+    const now = Date.now();
+    let receivedAt: string;
+    if (input.receivedAt) {
+      const t = Date.parse(input.receivedAt);
+      if (Number.isNaN(t)) throw validation("進貨時間格式不正確");
+      if (t > now + 5 * 60_000) throw validation("進貨時間不能晚於現在，請確認補登的日期與時間。");
+      receivedAt = new Date(t).toISOString();
+    } else if (input.receivedDate && input.receivedDate !== todayString()) {
+      receivedAt = `${input.receivedDate}T00:00:00.000Z`; // 台灣時間 08:00
+    } else {
+      receivedAt = new Date(now).toISOString();
+    }
+    const receivedDate = taipeiDateOf(receivedAt);
     const batchNo = nextBatchNo(db, receivedDate);
-    const batchId = db.insert("INSERT INTO Batch (batchNo, productId, receivedDate, expiryDate, initialQty, note, createdById) VALUES (?, ?, ?, ?, ?, ?, ?)", batchNo, product.id, receivedDate, input.expiryDate, input.quantity, input.note ?? null, ctx.operator.id);
+    const batchId = db.insert("INSERT INTO Batch (batchNo, productId, receivedDate, receivedAt, expiryDate, initialQty, note, createdById) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", batchNo, product.id, receivedDate, receivedAt, input.expiryDate, input.quantity, input.note ?? null, ctx.operator.id);
 
     const movementIds = input.allocations.map((a, i) => {
       const { before, after } = addInventory(db, batchId, a.locationId, a.quantity);
       return createMovement(db, ctx.operator.id, { type: "IN", productId: product.id, productName: product.name, batchId, quantity: a.quantity, to: { locationId: a.locationId, code: locs[i].code, before, after }, referenceType: "INBOUND", referenceId: batchId, reason: input.note });
     });
-    const createdAt = db.one<{ createdAt: string }>("SELECT createdAt FROM Batch WHERE id = ?", batchId)!.createdAt;
     return {
-      batch: { id: batchId, batchNo, productId: product.id, receivedDate, createdAt, expiryDate: input.expiryDate, initialQty: input.quantity, note: input.note ?? null },
+      batch: { id: batchId, batchNo, productId: product.id, receivedDate, receivedAt, expiryDate: input.expiryDate, initialQty: input.quantity, note: input.note ?? null },
       allocations: input.allocations.map((a, i) => ({ locationId: a.locationId, locationCode: locs[i].code, quantity: a.quantity })),
       movementIds,
     };
@@ -174,20 +186,27 @@ export function inbound(db: Db, input: InboundInput, ctx: Ctx) {
 
 // ---------- 出庫與 FEFO（FR-011、FR-012） ----------
 
+/**
+ * 出庫建議＝先進先出（FIFO，2026-09-30 使用者決定，取代原 FEFO）：依批次進貨時間由早到晚。
+ * 效期另外警示：每筆帶 expired／daysLeft／expiringSoon；已過期的批次照樣列出，但不自動安排出庫
+ * （過期貨不該交給客戶，要處理請走報損或盤點）。
+ */
 export function suggestFefo(db: Db, productId: number, quantity: number, today = todayString()) {
-  const product = db.one<ProductRow>("SELECT id, name, unit, status FROM Product WHERE id = ?", productId);
+  const product = db.one<ProductRow & { expiryAlertDays: number }>("SELECT id, name, unit, status, expiryAlertDays FROM Product WHERE id = ?", productId);
   if (!product) throw notFound("商品");
-  const rows = db.all<{ batchId: number; batchNo: string; receivedDate: string; createdAt: string; expiryDate: string; locationId: number; locationCode: string; quantity: number }>(
-    `SELECT i.batchId, b.batchNo, b.receivedDate, b.createdAt, b.expiryDate, i.locationId, l.code AS locationCode, i.quantity
+  const rows = db.all<{ batchId: number; batchNo: string; receivedDate: string; receivedAt: string; expiryDate: string; locationId: number; locationCode: string; quantity: number }>(
+    `SELECT i.batchId, b.batchNo, b.receivedDate, b.receivedAt, b.expiryDate, i.locationId, l.code AS locationCode, i.quantity
      FROM Inventory i JOIN Batch b ON b.id = i.batchId JOIN Location l ON l.id = i.locationId
-     WHERE i.quantity > 0 AND b.productId = ? ORDER BY b.expiryDate, b.receivedDate, l.code`, productId);
+     WHERE i.quantity > 0 AND b.productId = ? ORDER BY b.receivedAt, b.id, l.code`, productId);
   let remaining = quantity;
   const suggestions = rows.map((r) => {
-    const take = Math.min(remaining, r.quantity);
+    const expired = r.expiryDate < today;
+    const daysLeft = daysBetween(today, r.expiryDate);
+    const take = expired ? 0 : Math.min(remaining, r.quantity);
     remaining -= take;
-    return { batchId: r.batchId, batchNo: r.batchNo, receivedDate: r.receivedDate, createdAt: r.createdAt, expiryDate: r.expiryDate, expired: r.expiryDate < today, locationId: r.locationId, locationCode: r.locationCode, available: r.quantity, take };
+    return { batchId: r.batchId, batchNo: r.batchNo, receivedDate: r.receivedDate, receivedAt: r.receivedAt, expiryDate: r.expiryDate, expired, daysLeft, expiringSoon: !expired && daysLeft <= product.expiryAlertDays, locationId: r.locationId, locationCode: r.locationCode, available: r.quantity, take };
   });
-  const available = rows.reduce((s, r) => s + r.quantity, 0);
+  const available = rows.filter((r) => r.expiryDate >= today).reduce((s, r) => s + r.quantity, 0);
   return { product: { id: product.id, name: product.name, unit: product.unit }, requested: quantity, available, shortage: Math.max(0, remaining), suggestions };
 }
 

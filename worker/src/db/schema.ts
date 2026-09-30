@@ -2,7 +2,7 @@
  * 資料表定義（對應 docs/DATABASE_DESIGN.md）。
  * 在 Durable Object 的 SQLite 內執行；Inventory.quantity 的 CHECK 是最後防線。
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS Batch (
   batchNo TEXT NOT NULL UNIQUE,
   productId INTEGER NOT NULL REFERENCES Product(id),
   receivedDate TEXT NOT NULL,
+  receivedAt TEXT,            -- 進貨時間（ISO，UTC）；出庫先進先出依此排序
   expiryDate TEXT NOT NULL,
   initialQty INTEGER NOT NULL CHECK (initialQty > 0),
   note TEXT,
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS Batch (
   createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS Batch_product_expiry ON Batch(productId, expiryDate);
+-- Batch_product_received 不能放這裡：舊資料庫此時還沒有 receivedAt 欄位（見 POST_MIGRATION_SQL）
 
 CREATE TABLE IF NOT EXISTS BatchCounter (dateKey TEXT PRIMARY KEY, seq INTEGER NOT NULL DEFAULT 0);
 
@@ -182,6 +184,22 @@ CREATE INDEX IF NOT EXISTS Movement_type_time ON StockMovement(type, createdAt);
 CREATE INDEX IF NOT EXISTS Movement_product ON StockMovement(productId);
 CREATE INDEX IF NOT EXISTS Movement_batch ON StockMovement(batchId);
 UPDATE meta SET value = '2' WHERE key = 'schemaVersion';
+`;
+
+/** 所有遷移跑完之後才建立的索引（依賴新欄位）。 */
+export const POST_MIGRATION_SQL = `CREATE INDEX IF NOT EXISTS Batch_product_received ON Batch(productId, receivedAt);`;
+
+/**
+ * v4 → v5：批次加上精確的進貨時間（出庫改為先進先出）。
+ * 舊資料：當天建立的批次用建立時間；補登／示範資料不知道幾點，一律記為當天 08:00（台灣時間）。
+ */
+export const MIGRATE_V4_TO_V5 = `
+ALTER TABLE Batch ADD COLUMN receivedAt TEXT;
+UPDATE Batch SET receivedAt = CASE
+  WHEN date(createdAt, '+8 hours') = receivedDate THEN createdAt
+  ELSE receivedDate || 'T00:00:00.000Z' END;
+CREATE INDEX IF NOT EXISTS Batch_product_received ON Batch(productId, receivedAt);
+UPDATE meta SET value = '5' WHERE key = 'schemaVersion';
 `;
 
 /** v3 → v4：盤點差異原因（腐爛／損壞、找不到、其他＋備註）。 */

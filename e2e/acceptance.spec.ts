@@ -49,6 +49,34 @@ test.describe.serial("老師驗收流程", () => {
     expect((await api(page, "GET", `/locations/${await locationIdByCode(page, "A-01-03")}`)).occupied).toBe(2);
   });
 
+  test("補登進貨時間（日期＋時分）→ 出庫先進先出：先拿最早進貨的那批，並顯示時分", async ({ page }) => {
+    await pairAndLogin(page, "admin");
+    await page.goto("/inbound");
+    await page.getByRole("radio", { name: /甘藍菜/ }).click();
+    await page.getByLabel("數量").fill("1");
+    await page.getByRole("button", { name: "貨是之前到的？補登進貨時間" }).click();
+    await page.getByLabel("進貨日期").fill(taipeiDay(-1));
+    await page.getByLabel("進貨時間（時分）").fill("09:30");
+    await expect(page.getByText(`進貨時間：${slash(taipeiDay(-1))} 09:30（補登）`)).toBeVisible();
+    await selectByText(page.getByRole("combobox", { name: "儲位", exact: true }).first(), "A-01-04");
+    await page.getByRole("button", { name: "下一步：核對並入庫" }).click();
+    await page.getByRole("button", { name: "確認入庫" }).click();
+    await expect(page.getByText(`進貨時間：${slash(taipeiDay(-1))} 09:30（系統已記錄）`)).toBeVisible();
+
+    // A-01-03 是剛剛（今天）進的 2 箱，A-01-04 是昨天 09:30 補登的 1 箱 → 先進先出要先拿 A-01-04
+    await page.goto("/outbound");
+    await page.getByRole("radio", { name: /甘藍菜/ }).click();
+    await page.getByLabel("出庫數量", { exact: true }).fill("1");
+    await expect(page.getByText(/從 A-01-04 取 1 箱/)).toBeVisible();
+    await expect(page.getByText("最早入庫")).toBeVisible();
+    await expect(page.getByText(`進貨 ${slash(taipeiDay(-1))} 09:30`).first()).toBeVisible();
+    await page.getByRole("button", { name: "下一步：核對並出庫" }).click();
+    await page.getByRole("button", { name: "確認出庫" }).click();
+    await expect(page.getByText("✓ 出庫完成")).toBeVisible();
+    expect((await api(page, "GET", `/locations/${await locationIdByCode(page, "A-01-04")}`)).occupied).toBe(0);
+    expect((await api(page, "GET", `/locations/${await locationIdByCode(page, "A-01-03")}`)).occupied).toBe(2);
+  });
+
   test("後端也擋：直接呼叫 API 送昨天到期 → 400，庫存不變", async ({ page }) => {
     await pairAndLogin(page, "admin");
     const cabbage = await productByName(page, "甘藍菜");

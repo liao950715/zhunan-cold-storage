@@ -51,13 +51,13 @@ test.describe.serial("整合展示情境（AT-03/13/11/19/25、AT-08）", () => 
     await expect(page.getByText("✓ 搬移完成")).toBeVisible();
     expect((await api(page, "GET", `/products/${cabbage.id}/stock`)).total).toBe(30); // 總量不變
 
-    // ---- 出庫 10（AT-11：建議先到期先出，人工確認）----
+    // ---- 出庫 10（AT-11：建議先進先出，人工確認）----
     await page.goto("/outbound");
     await page.getByRole("radio", { name: /甘藍菜/ }).click();
     await expect(page.getByText("目前選擇：甘藍菜")).toBeVisible();
     await page.getByLabel("出庫數量").fill("10");
     await expect(page.getByText(/從 A-01-0\d 取 \d+ 箱/).first()).toBeVisible();
-    await expect(page.getByText("最早到期").first()).toBeVisible();
+    await expect(page.getByText("最早入庫").first()).toBeVisible();
     await page.getByRole("button", { name: "下一步：核對並出庫" }).click();
     await expect(page.getByText("甘藍菜，出庫 10 箱")).toBeVisible();
     await page.getByRole("button", { name: "確認出庫" }).click();

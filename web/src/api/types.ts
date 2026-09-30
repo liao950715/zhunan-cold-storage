@@ -81,7 +81,7 @@ export interface StockLine {
   inventoryId: number;
   quantity: number;
   product: { id: number; name: string; unit: string };
-  batch: { id: number; batchNo: string; receivedDate: string; createdAt?: string; expiryDate: string };
+  batch: { id: number; batchNo: string; receivedDate: string; receivedAt?: string; expiryDate: string };
   location: { id: number; code: string; rackId: number; rackCode: string; warehouseId: number; warehouseCode: string; warehouseName: string };
 }
 
@@ -151,7 +151,7 @@ export interface FefoSuggestion {
   requested: number;
   available: number;
   shortage: number;
-  suggestions: Array<{ batchId: number; batchNo: string; receivedDate: string; createdAt?: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; take: number }>;
+  suggestions: Array<{ batchId: number; batchNo: string; receivedDate: string; receivedAt?: string; expiryDate: string; expired: boolean; daysLeft?: number; expiringSoon?: boolean; locationId: number; locationCode: string; available: number; take: number }>;
 }
 
 export type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT" | "REVERSAL";
@@ -200,7 +200,7 @@ export interface StocktakeItem {
   batchId: number;
   batchNo: string;
   receivedDate?: string;
-  createdAt?: string;
+  receivedAt?: string;
   expiryDate: string;
   product: { id: number; name: string; unit: string };
   systemQty: number;
@@ -239,7 +239,7 @@ export interface BaselineItem {
   batchId: number;
   batchNo: string;
   receivedDate?: string;
-  createdAt?: string;
+  receivedAt?: string;
   expiryDate: string;
   product: { id: number; name: string; unit: string };
   systemQty: number;

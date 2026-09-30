@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { errorMessage, get, post } from "../api/client";
-import { useAllLocations, useInvalidateStock, useLayout, useProducts, useWarehouses } from "../api/hooks";
+import { todayStr, useAllLocations, useInvalidateStock, useLayout, useProducts, useWarehouses } from "../api/hooks";
 import FloorplanCanvas from "../features/floorplan/FloorplanCanvas";
 import { toDraft } from "../features/floorplan/geometry";
 import type { FefoSuggestion, Product, ProductStock } from "../api/types";
@@ -10,10 +10,11 @@ import ProductSelect from "../components/ProductSelect";
 import { Message, PageTitle, Step, StepBanner, fmtDate, fmtReceived } from "../components/ui";
 import { locationWords } from "../lib/words";
 
-interface Line { batchId: number; batchNo: string; receivedDate: string; createdAt?: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; quantity: number }
+interface Line { batchId: number; batchNo: string; receivedDate: string; receivedAt?: string; expiryDate: string; expired: boolean; daysLeft?: number; expiringSoon?: boolean; locationId: number; locationCode: string; available: number; quantity: number }
 
 /**
- * 出庫（FR-011／012）：要出什麼 → 要出多少 → 到哪裡拿（系統建議先拿快到期的，可調整）→ 確認出庫。
+ * 出庫（FR-011／012）：要出什麼 → 要出多少 → 到哪裡拿（系統建議先進先出：最早進貨的先拿，可調整）→ 確認出庫。
+ * 效期另外警示：已過期不自動安排、快到期標示、較晚進貨卻較早到期的批次會提醒。
  * 從平面圖／查詢帶 ?productId=&batchId=&locationId= 進來時，直接列出該儲位。
  */
 export default function Outbound() {
@@ -42,7 +43,12 @@ export default function Outbound() {
   useEffect(() => {
     if (!stock.data || lines.length > 0 || !preset.locationId) return;
     const rows = stock.data.lines.filter((l) => l.location.id === preset.locationId && (!preset.batchId || l.batch.id === preset.batchId));
-    setLines(rows.map((l) => ({ batchId: l.batch.id, batchNo: l.batch.batchNo, receivedDate: l.batch.receivedDate, createdAt: l.batch.createdAt, expiryDate: l.batch.expiryDate, expired: l.batch.expiryDate < new Date().toISOString().slice(0, 10), locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 })));
+    const today = todayStr();
+    const alert = product?.expiryAlertDays ?? 0;
+    setLines(rows.map((l) => {
+      const daysLeft = Math.round((Date.parse(l.batch.expiryDate) - Date.parse(today)) / 86_400_000);
+      return { batchId: l.batch.id, batchNo: l.batch.batchNo, receivedDate: l.batch.receivedDate, receivedAt: l.batch.receivedAt, expiryDate: l.batch.expiryDate, expired: daysLeft < 0, daysLeft, expiringSoon: daysLeft >= 0 && daysLeft <= alert, locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 };
+    }));
     setAdjusting(true);
   }, [stock.data, preset.locationId, preset.batchId, lines.length]);
 
@@ -72,6 +78,11 @@ export default function Outbound() {
   }, [product?.id, quantity]);
 
   const total = lines.reduce((s, l) => s + (l.quantity || 0), 0);
+  // 效期另外警示
+  const expiredLines = lines.filter((l) => l.expired);
+  const firstFifo = lines.findIndex((l) => !l.expired);
+  const takenMinExpiry = lines.filter((l) => l.quantity > 0).reduce<string | null>((m, l) => (m === null || l.expiryDate < m ? l.expiryDate : m), null);
+  const earlierExpiry = takenMinExpiry ? lines.find((l) => l.quantity === 0 && !l.expired && l.expiryDate < takenMinExpiry) ?? null : null;
   const over = lines.some((l) => l.quantity > l.available);
   const active = lines.filter((l) => l.quantity > 0);
   // 只有「建議是針對目前數量算的」時才顯示不足（手動調整過就以各儲位合計為準）
@@ -85,7 +96,7 @@ export default function Outbound() {
     if (shortage > 0) return `庫存只有 ${suggest.data!.available} ${product.unit}，不夠 ${shortage} ${product.unit}；請改數量，或只出 ${suggest.data!.available} ${product.unit}`;
     if (over) return "有一筆超過該儲位的數量，請改小";
     if (active.length === 0) return "請在取貨位置填數量";
-    return "取貨位置已在圖上標出（先出快到期的）；不合適可按「調整」或點圖上有這個商品的格子，確認後按「下一步：核對並出庫」";
+    return "取貨位置已在圖上標出（先進先出：最早進貨的先拿）；不合適可按「調整」或點圖上有這個商品的格子，確認後按「下一步：核對並出庫」";
   })();
 
   const m = useMutation({
@@ -160,7 +171,7 @@ export default function Outbound() {
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{product.name}，出庫 {total} {unit}</p>
           {active.map((l) => (
-            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}<span className="ml-2 muted">進貨 {fmtReceived(l.receivedDate, l.createdAt)}・到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
+            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}<span className="ml-2 muted">進貨 {fmtReceived(l.receivedAt, l.receivedDate)}・到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
           ))}
         </div>
         {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
@@ -196,18 +207,21 @@ export default function Outbound() {
 
       <Step n={preset.locationId ? 2 : 3} title="到哪裡拿？" done={active.length > 0 && !over}>
         {lines.length === 0 ? (
-          <p className="muted">{product ? "填好數量後，這裡會列出建議的取貨位置（先拿快到期的）。" : "請先選商品。"}</p>
+          <p className="muted">{product ? "填好數量後，這裡會列出建議的取貨位置（先進先出：最早進貨的先拿）。" : "請先選商品。"}</p>
         ) : (
           <div className="space-y-3">
-            {!preset.locationId && <p className="muted">建議優先出庫（先到期先出）：系統先列出最早到期的貨；不合適可以按「調整」。</p>}
+            {!preset.locationId && <p className="muted">建議優先出庫（先進先出）：系統依進貨時間，先列出最早進貨的貨；不合適可以按「調整」。</p>}
+            {expiredLines.length > 0 && <Message kind="warn">有 {expiredLines.length} 筆已過期（{[...new Set(expiredLines.map((l) => l.locationCode))].join("、")}），系統沒有安排出庫；請改走報損或盤點處理。</Message>}
+            {earlierExpiry && <Message kind="warn">效期提醒：{earlierExpiry.locationCode} 那批較晚進貨，但 {fmtDate(earlierExpiry.expiryDate)} 就到期，比建議先拿的更早到期，請確認要不要先出那批。</Message>}
             <div className="divide-y divide-line">
               {lines.map((l, i) => (adjusting || l.quantity > 0) && (
                 <div key={`${l.batchId}-${l.locationId}`} className={`flex flex-wrap items-center gap-3 py-3 ${l.quantity > 0 ? "" : "opacity-70"}`}>
                   <div className="flex-1">
-                    <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}{i === 0 && !preset.locationId && <span className="tag-info ml-2 align-middle text-[14px]">最早到期</span>}</p>
+                    <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}{i === firstFifo && !preset.locationId && <span className="tag-info ml-2 align-middle text-[14px]">最早入庫</span>}</p>
                     <p className="muted">
-                      這裡有 {l.available} {unit}・進貨 {fmtReceived(l.receivedDate, l.createdAt)}・到期 {fmtDate(l.expiryDate)}
+                      這裡有 {l.available} {unit}・進貨 {fmtReceived(l.receivedAt, l.receivedDate)}・到期 {fmtDate(l.expiryDate)}
                       {l.expired && <span className="tag-bad ml-2">已過期</span>}
+                      {l.expiringSoon && <span className="tag-warn ml-2">{l.daysLeft === 0 ? "今天到期" : `${l.daysLeft} 天後到期`}</span>}
                       <span className="ml-2">批次 {l.batchNo}</span>
                     </p>
                   </div>

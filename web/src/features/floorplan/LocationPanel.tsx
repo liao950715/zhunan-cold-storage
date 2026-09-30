@@ -32,7 +32,7 @@ export default function LocationPanel({ locationId, onAction }: { locationId: nu
         <div className="divide-y divide-line">
           {d.lines.map((l) => (
             <div key={l.inventoryId} className="flex items-center justify-between py-2 text-[16px]">
-              <span>進貨 {fmtReceived(l.batch.receivedDate, l.batch.createdAt)}・到期 {fmtDate(l.batch.expiryDate)}<span className="ml-2 text-ink-2">批次 {l.batch.batchNo}</span></span>
+              <span>進貨 {fmtReceived(l.batch.receivedAt, l.batch.receivedDate)}・到期 {fmtDate(l.batch.expiryDate)}<span className="ml-2 text-ink-2">批次 {l.batch.batchNo}</span></span>
               <b>{l.quantity} {l.product.unit}</b>
             </div>
           ))}

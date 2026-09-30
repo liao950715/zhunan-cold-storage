@@ -1,4 +1,4 @@
-/** 2026-09-30 老師驗收流程調整：I-15 到期日驗證、I-16 盤點差異原因、I-17 進貨時間可見 */
+/** 2026-09-30 老師驗收流程調整：I-15 到期日驗證、I-16 盤點差異原因、I-17 進貨時間可見、I-18 先進先出 */
 import { beforeEach, describe, expect, it } from "vitest";
 import { Client, loginAs, locationIdByCode, locQty, movements, productByName } from "./helpers.js";
 
@@ -37,13 +37,34 @@ describe("驗收流程調整", () => {
   it("I-17：入庫回傳並記錄進貨日期與系統時間；庫存明細、出庫建議、盤點基準都帶得到", async () => {
     const r = (await inbound(taipeiDay(30))).body;
     expect(r.batch.receivedDate).toBe(taipeiDay(0));
-    expect(r.batch.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+    expect(r.batch.receivedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+    expect(Math.abs(Date.parse(r.batch.receivedAt) - Date.now())).toBeLessThan(60_000); // 即時入庫＝現在
     const stock = (await staff.get(`/api/products/${cabbageId}/stock`)).body;
-    expect(stock.lines[0].batch).toMatchObject({ receivedDate: taipeiDay(0), createdAt: r.batch.createdAt });
+    expect(stock.lines[0].batch).toMatchObject({ receivedDate: taipeiDay(0), receivedAt: r.batch.receivedAt });
     const sug = (await staff.post("/api/stock/outbound/suggest", { productId: cabbageId, quantity: 1 })).body;
-    expect(sug.suggestions[0]).toMatchObject({ receivedDate: taipeiDay(0) });
+    expect(sug.suggestions[0]).toMatchObject({ receivedDate: taipeiDay(0), receivedAt: r.batch.receivedAt });
     const base = (await staff.get("/api/stocktakes/baseline")).body.items.find((b: any) => b.batchId === r.batch.id);
-    expect(base).toMatchObject({ receivedDate: taipeiDay(0) });
+    expect(base).toMatchObject({ receivedDate: taipeiDay(0), receivedAt: r.batch.receivedAt });
+  });
+
+  it("I-17b：補登進貨時間（日期＋時分）照實記錄；晚於現在 → 400", async () => {
+    const at = `${taipeiDay(-3)}T14:25:00+08:00`;
+    const r = (await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 1, expiryDate: taipeiDay(30), receivedAt: at, allocations: [{ locationId: A0103, quantity: 1 }] }).expect(201)).body;
+    expect(r.batch.receivedAt).toBe(new Date(at).toISOString());
+    expect(r.batch.receivedDate).toBe(taipeiDay(-3));
+    expect(r.batch.batchNo).toContain(taipeiDay(-3).replace(/-/g, ""));
+    const future = await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 1, expiryDate: taipeiDay(30), receivedAt: new Date(Date.now() + 3_600_000).toISOString(), allocations: [{ locationId: A0103, quantity: 1 }] });
+    expect(future.status).toBe(400);
+  });
+
+  it("I-18：先進先出——同一天兩批依時分排序；效期另外標示（快到期、已過期）", async () => {
+    const A0104 = await locationIdByCode(staff, "A-01-04");
+    const morning = (await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 3, expiryDate: taipeiDay(40), receivedAt: `${taipeiDay(-1)}T08:05:00+08:00`, allocations: [{ locationId: A0103, quantity: 3 }] }).expect(201)).body;
+    const afternoon = (await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 3, expiryDate: taipeiDay(3), receivedAt: `${taipeiDay(-1)}T15:40:00+08:00`, allocations: [{ locationId: A0104, quantity: 3 }] }).expect(201)).body;
+    const sug = (await staff.post("/api/stock/outbound/suggest", { productId: cabbageId, quantity: 4 })).body;
+    expect(sug.suggestions.map((s: any) => [s.batchNo, s.take])).toEqual([[morning.batch.batchNo, 3], [afternoon.batch.batchNo, 1]]);
+    expect(sug.suggestions[0]).toMatchObject({ expiringSoon: false, daysLeft: 40 });
+    expect(sug.suggestions[1]).toMatchObject({ expiringSoon: true, daysLeft: 3 }); // 甘藍菜效期提醒 14 天
   });
 
   describe("I-16：盤點差異原因", () => {

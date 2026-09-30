@@ -142,7 +142,7 @@ function NewStocktake({ onDone }: { onDone: (id: number) => void }) {
             <div key={key(b)} className={`flex flex-wrap items-center gap-3 py-3 ${d !== 0 ? "-mx-2 rounded-[10px] bg-warn-soft/40 px-2" : ""}`}>
               <div className="min-w-[200px] flex-1">
                 <p className="text-[20px] font-bold">{b.locationCode}　{b.product.name}{b.expiryDate < today && <span className="tag-bad ml-2 align-middle">已過期，請檢查是否腐爛</span>}</p>
-                <p className="muted">系統數量 <b className="text-ink">{b.systemQty} {b.product.unit}</b>・進貨 {b.receivedDate ? fmtReceived(b.receivedDate, b.createdAt) : "—"}・到期 {fmtDate(b.expiryDate)}・批次 {b.batchNo}</p>
+                <p className="muted">系統數量 <b className="text-ink">{b.systemQty} {b.product.unit}</b>・進貨 {fmtReceived(b.receivedAt, b.receivedDate)}・到期 {fmtDate(b.expiryDate)}・批次 {b.batchNo}</p>
               </div>
               <label className="flex items-center gap-2 text-[18px]">實盤
                 <input type="number" min={0} inputMode="numeric" className="input mt-0 w-28 text-right text-[22px] font-bold" value={c} onChange={(e) => setCounts({ ...counts, [key(b)]: Number(e.target.value) })} aria-label={`${b.locationCode} 實盤數量`} />

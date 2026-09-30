@@ -204,7 +204,7 @@ export function createApp(env: AppEnv) {
 
   // ---------- 庫存交易 ----------
   app.post("/api/stock/inbound", async (c) => {
-    const input = z.object({ productId: id, quantity: positiveInt, expiryDate: dateString, receivedDate: dateString.optional(), note: z.string().max(500).nullable().optional(), allocations: z.array(z.object({ locationId: id, quantity: positiveInt })).min(1, "至少分配一個儲位") }).parse(await c.req.json());
+    const input = z.object({ productId: id, quantity: positiveInt, expiryDate: dateString, receivedDate: dateString.optional(), receivedAt: z.string().datetime({ offset: true }).optional(), note: z.string().max(500).nullable().optional(), allocations: z.array(z.object({ locationId: id, quantity: positiveInt })).min(1, "至少分配一個儲位") }).parse(await c.req.json());
     return c.json(stock.inbound(db, input, ctxOf(c, input)), 201);
   });
   app.post("/api/stock/outbound/suggest", async (c) => {

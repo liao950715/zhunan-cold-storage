@@ -104,14 +104,6 @@ export const fmtClock = (dt: Date | string) => {
   const t = new Date(new Date(dt).getTime() + 8 * 3_600_000).toISOString();
   return `${t.slice(0, 10).replace(/-/g, "/")} ${t.slice(11, 16)}`;
 };
-/**
- * 批次的進貨時間：當天即時入庫的批次顯示到「時:分」（系統記錄的時間）；
- * 補登或示範資料只有日期，就只顯示日期，不假裝有時間。
- */
-export const fmtReceived = (receivedDate: string, createdAt?: string | null) => {
-  if (createdAt) {
-    const clock = fmtClock(createdAt);
-    if (clock.slice(0, 10) === fmtDate(receivedDate)) return clock;
-  }
-  return fmtDate(receivedDate);
-};
+/** 批次的進貨時間（每一批都有時分，台灣時間）；萬一缺資料才退回只顯示日期。 */
+export const fmtReceived = (receivedAt?: string | null, receivedDate?: string) =>
+  receivedAt ? fmtClock(receivedAt) : receivedDate ? fmtDate(receivedDate) : "—";

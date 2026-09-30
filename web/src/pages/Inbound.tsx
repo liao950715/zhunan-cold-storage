@@ -30,15 +30,19 @@ export default function Inbound() {
   const [allocs, setAllocs] = useState<Alloc[]>([{ locationId: presetLocation, quantity: 0 }]);
   const [split, setSplit] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<{ batchNo: string; receivedDate: string; createdAt?: string; allocations: Array<{ locationCode: string; quantity: number }> } | null>(null);
+  const [result, setResult] = useState<{ batchNo: string; receivedDate: string; receivedAt?: string; allocations: Array<{ locationCode: string; quantity: number }> } | null>(null);
   const [backdate, setBackdate] = useState(false);
+  const [receivedTime, setReceivedTime] = useState("08:00"); // 補登時的時分（台灣時間）
   // 進貨時間：畫面上一直顯示「現在」，按「確認入庫」那一刻由系統記錄
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30_000); return () => clearInterval(t); }, []);
   const today = todayStr();
   const expired = !!expiryDate && expiryDate < today;
   const expiresToday = expiryDate === today;
-  const receivedText = receivedDate === today ? fmtClock(now) : `${fmtDate(receivedDate)}（補登日期）`;
+  // 補登：日期＋時分都要填，送出 +08:00 的時間；不補登就是「按確認入庫的那一刻」
+  const receivedAtInput = backdate ? `${receivedDate}T${receivedTime || "00:00"}:00+08:00` : null;
+  const backdateFuture = !!receivedAtInput && Date.parse(receivedAtInput) > now.getTime() + 60_000;
+  const receivedText = backdate ? `${fmtDate(receivedDate)} ${receivedTime}（補登）` : fmtClock(now);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
 
   // 從儲位入口：若該儲位已有商品，自動帶入該商品（AT-18）
@@ -61,6 +65,7 @@ export default function Inbound() {
   if (quantity <= 0) missing.push("輸入數量");
   if (!expiryDate) missing.push("填到期日");
   if (expired) missing.push("到期日已過，無法入庫");
+  if (backdateFuture) missing.push("補登的進貨時間不能晚於現在");
   if (allocs.some((a) => !a.locationId)) missing.push("選擇放置位置");
   if (split && allocs.some((a) => a.quantity <= 0)) missing.push("填每個儲位的數量");
   if (mismatch) missing.push(`分配合計 ${allocated} 要等於入庫量 ${quantity}`);
@@ -87,13 +92,13 @@ export default function Inbound() {
 
   const m = useMutation({
     mutationFn: () =>
-      post<{ batch: { batchNo: string; receivedDate: string; createdAt?: string }; allocations: Array<{ locationCode: string; quantity: number }> }>(
+      post<{ batch: { batchNo: string; receivedDate: string; receivedAt?: string }; allocations: Array<{ locationCode: string; quantity: number }> }>(
         "/stock/inbound",
-        { productId: product!.id, quantity, expiryDate, receivedDate, note: note || null, allocations: allocs.map((a) => ({ locationId: a.locationId!, quantity: a.quantity })) },
+        { productId: product!.id, quantity, expiryDate, ...(receivedAtInput ? { receivedAt: receivedAtInput } : {}), note: note || null, allocations: allocs.map((a) => ({ locationId: a.locationId!, quantity: a.quantity })) },
         idemKey,
       ),
     onSuccess: async (r) => {
-      setResult({ batchNo: r.batch.batchNo, receivedDate: r.batch.receivedDate, createdAt: r.batch.createdAt, allocations: r.allocations });
+      setResult({ batchNo: r.batch.batchNo, receivedDate: r.batch.receivedDate, receivedAt: r.batch.receivedAt, allocations: r.allocations });
       await invalidate();
       setIdemKey(crypto.randomUUID());
       setConfirming(false);
@@ -103,6 +108,7 @@ export default function Inbound() {
       setNote("");
       setReceivedDate(todayStr());
       setBackdate(false);
+      setReceivedTime("08:00");
     },
     onError: () => setConfirming(false),
   });
@@ -115,7 +121,7 @@ export default function Inbound() {
           <p className="text-[26px] font-bold text-ok">✓ 入庫完成</p>
           <p className="text-[22px] font-bold">{product?.name}，共 {result.allocations.reduce((s, a) => s + a.quantity, 0)} {product?.unit}</p>
           {result.allocations.map((a) => <p key={a.locationCode} className="text-[20px]">放在 <b>{a.locationCode}</b>：{a.quantity} {product?.unit}</p>)}
-          <p className="text-[20px]">進貨時間：<b>{fmtReceived(result.receivedDate, result.createdAt)}</b>（系統已記錄）</p>
+          <p className="text-[20px]">進貨時間：<b>{fmtReceived(result.receivedAt, result.receivedDate)}</b>（系統已記錄）</p>
           <p className="muted">批次編號 {result.batchNo}（系統自動產生）</p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -138,7 +144,7 @@ export default function Inbound() {
             const loc = locName(a.locationId);
             return <p key={i} className="text-[22px]">放在 <b>{loc?.code}</b><span className="ml-2 text-[18px] text-ink-2">{loc ? locationWords(loc.code) : ""}</span>{split && <>：{a.quantity} {product.unit}</>}</p>;
           })}
-          <p className="text-[20px]">進貨時間：<b>{receivedText}</b>{receivedDate === today && <span className="ml-2 text-[16px] text-ink-2">按下確認時系統自動記錄</span>}</p>
+          <p className="text-[20px]">進貨時間：<b>{receivedText}</b>{!backdate && <span className="ml-2 text-[16px] text-ink-2">按下確認時系統自動記錄</span>}</p>
           <p className="text-[20px]">到期日 {fmtDate(expiryDate)}</p>
           {expired && <Message kind="error">此商品已過期，無法入庫，請確認到期日。</Message>}
           {expiresToday && <Message kind="warn">此商品今天到期，請確認是否仍要入庫。</Message>}
@@ -147,7 +153,7 @@ export default function Inbound() {
         {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
         <div className="flex flex-wrap gap-3">
           <button className="btn" onClick={() => setConfirming(false)}>返回修改</button>
-          <button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending || expired}>{m.isPending ? "入庫中…" : "確認入庫"}</button>
+          <button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending || expired || backdateFuture}>{m.isPending ? "入庫中…" : "確認入庫"}</button>
         </div>
       </div>
     );
@@ -173,15 +179,17 @@ export default function Inbound() {
       <Step n={3} title="進貨時間與到期日" done={!!expiryDate && !expired}>
         <div className="mb-4 rounded-[10px] bg-bg-2 px-4 py-3">
           <p className="text-[22px]">進貨時間：<b>{receivedText}</b></p>
-          <p className="muted">{receivedDate === today ? "按「確認入庫」時，系統自動記錄進貨日期與時間，之後出庫會依批次先後排列。" : "補登的貨只記錄日期。"}</p>
+          <p className="muted">{backdate ? "補登：請填貨實際到的日期與時間。" : "按「確認入庫」時，系統自動記錄進貨日期與時間。"}出庫時會依進貨時間先進先出。</p>
           {!backdate ? (
-            <button type="button" className="btn-sm mt-2" onClick={() => setBackdate(true)}>貨是之前到的？補登進貨日期</button>
+            <button type="button" className="btn-sm mt-2" onClick={() => { setBackdate(true); setReceivedTime(fmtClock(now).slice(11, 16)); }}>貨是之前到的？補登進貨時間</button>
           ) : (
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <input type="date" className="input mt-0 max-w-[220px]" max={today} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value || today)} aria-label="進貨日期" />
-              <button type="button" className="btn-sm" onClick={() => { setReceivedDate(today); setBackdate(false); }}>改回今天</button>
+              <input type="time" className="input mt-0 max-w-[160px]" value={receivedTime} onChange={(e) => setReceivedTime(e.target.value)} aria-label="進貨時間（時分）" />
+              <button type="button" className="btn-sm" onClick={() => { setReceivedDate(today); setBackdate(false); }}>改回現在</button>
             </div>
           )}
+          {backdateFuture && <div className="mt-2"><Message kind="error">補登的進貨時間不能晚於現在。</Message></div>}
         </div>
         <p className="mb-2 text-[18px] font-bold">到期日：</p>
         <div className="mb-3 flex flex-wrap gap-2">

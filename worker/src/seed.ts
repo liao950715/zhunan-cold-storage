@@ -93,9 +93,14 @@ export function seedDemoStock(db: Db, mode: "basic" | "rich" = "basic") {
     { product: "青江菜", receivedOffset: -3, expiryOffset: 15, allocations: [["B-03-05", 8]] },
   ];
   const rows = mode === "rich" ? rich : basic;
-  for (const r of rows) {
+  // 每批給一個像真的進貨時分（台灣時間 07:00～17:59 之間，依序錯開）
+  const receivedAt = (offset: number, idx: number) => {
+    const minutes = (7 + ((idx * 5) % 11)) * 60 + ((idx * 17) % 60);
+    return new Date(Math.min(Date.now() - 60_000, Date.parse(`${day(offset)}T00:00:00Z`) - 8 * 3_600_000 + minutes * 60_000)).toISOString();
+  };
+  for (const [idx, r] of rows.entries()) {
     const productId = db.one<{ id: number }>("SELECT id FROM Product WHERE name = ?", r.product)!.id;
     const allocations = r.allocations.map(([code, quantity]) => ({ locationId: db.one<{ id: number }>("SELECT id FROM Location WHERE code = ?", code)!.id, quantity }));
-    inbound(db, { productId, quantity: allocations.reduce((s, a) => s + a.quantity, 0), receivedDate: day(r.receivedOffset), expiryDate: day(r.expiryOffset), note: "示範資料", allocations }, { operator: { id: admin.id }, allowExpiredForSeed: true });
+    inbound(db, { productId, quantity: allocations.reduce((s, a) => s + a.quantity, 0), receivedAt: receivedAt(r.receivedOffset, idx), expiryDate: day(r.expiryOffset), note: "示範資料", allocations }, { operator: { id: admin.id }, allowExpiredForSeed: true });
   }
 }

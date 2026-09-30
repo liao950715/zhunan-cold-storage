@@ -5,7 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createApp } from "./app.js";
 import { Db } from "./lib/sql.js";
-import { MIGRATE_V1_TO_V2, MIGRATE_V2_TO_V3, MIGRATE_V3_TO_V4, SCHEMA_SQL, SCHEMA_VERSION } from "./db/schema.js";
+import { MIGRATE_V1_TO_V2, MIGRATE_V2_TO_V3, MIGRATE_V3_TO_V4, MIGRATE_V4_TO_V5, POST_MIGRATION_SQL, SCHEMA_SQL, SCHEMA_VERSION } from "./db/schema.js";
 import { seedBase, seedDemoStock } from "./seed.js";
 
 export interface Env {
@@ -34,7 +34,9 @@ export class WarehouseDO extends DurableObject<Env> {
         if (Number(v.value) < 2) db.tx(() => db.exec(MIGRATE_V1_TO_V2)); // 既有資料庫：升級到 v2（FR-020 復原）
         if (Number(v.value) < 3) db.tx(() => db.exec(MIGRATE_V2_TO_V3)); // v3：防重送識別碼綁定請求內容
         if (Number(v.value) < 4) db.tx(() => db.exec(MIGRATE_V3_TO_V4)); // v4：盤點差異原因
+        if (Number(v.value) < 5) db.tx(() => db.exec(MIGRATE_V4_TO_V5)); // v5：批次進貨時間（先進先出）
       }
+      db.exec(POST_MIGRATION_SQL);
       const mode = env.DEMO_MODE === "rich" ? "rich" : "basic";
       if (db.one<{ n: number }>("SELECT COUNT(*) AS n FROM User")!.n === 0) {
         await seedBase(db);
