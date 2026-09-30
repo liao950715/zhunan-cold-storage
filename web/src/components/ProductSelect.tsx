@@ -12,24 +12,47 @@ export default function ProductSelect({ value, onChange, allowCreate = true }: {
   const products = useProducts();
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
-  const items = (products.data?.items ?? []).filter((p) => !q || p.name.includes(q));
+  const all = products.data?.items ?? [];
+  const selected = all.find((p) => p.id === value) ?? null;
+  const items = all.filter((p) => !q || p.name.includes(q));
 
   return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <input className="input mt-0 flex-1" placeholder="輸入商品名稱來找，例如：甘藍菜" value={q} onChange={(e) => setQ(e.target.value)} />
+    <div className="space-y-3">
+      {/* 唯讀顯示：不是輸入框。點下面的商品，這裡就會顯示選了哪一個 */}
+      <div role="status" aria-live="polite" className={`rounded-[12px] px-4 py-3 text-[22px] ${selected ? "border-2 border-brand bg-brand-soft" : "border-2 border-dashed border-line bg-bg-2 text-ink-2"}`}>
+        {selected ? <>目前選擇：<b className="text-ink">{selected.name}</b><span className="ml-2 text-[18px] text-ink-2">（單位：{selected.unit}）</span></> : "目前選擇：尚未選擇，請點下面的商品"}
+      </div>
+
+      <p className="text-[18px] font-bold">請點選商品：</p>
+      <div role="radiogroup" aria-label="商品" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {items.map((p) => {
+          const on = p.id === value;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(p)}
+              className={`flex min-h-[56px] items-center justify-between gap-2 rounded-[10px] border-2 px-3 text-left text-[20px] font-medium ${on ? "border-brand bg-brand-soft text-ink" : "border-line bg-white text-ink hover:border-brand"}`}
+            >
+              <span>{on && <span aria-hidden="true" className="mr-1 text-brand-deep">✓</span>}{p.name}</span>
+              <span className="text-[16px] text-ink-2">{p.unit}</span>
+            </button>
+          );
+        })}
+        {products.data && items.length === 0 && <p className="col-span-full text-[18px] text-ink-2">找不到名稱含「{q}」的商品。</p>}
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="min-w-[220px] flex-1">
+          <span className="block text-[16px] text-ink-2">商品太多找不到？輸入名稱縮小上面的清單（可不填）</span>
+          <input className="input mt-1" placeholder="例如：甘藍" value={q} onChange={(e) => setQ(e.target.value)} aria-label="縮小商品清單" />
+        </label>
         {allowCreate && (
           <button type="button" className="btn" onClick={() => setCreating(true)}>找不到？新增商品</button>
         )}
       </div>
-      <select className="input mt-0" value={value ?? ""} onChange={(e) => onChange(products.data?.items.find((p) => p.id === Number(e.target.value)) ?? null)} size={Math.min(6, Math.max(3, items.length + 1))} aria-label="商品">
-        <option value="">— 請點選商品 —</option>
-        {items.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}（{p.unit}）{p.category ? ` · ${p.category}` : ""}
-          </option>
-        ))}
-      </select>
       {creating && (
         <CreateProductInline
           initialName={q}
@@ -47,7 +70,7 @@ export default function ProductSelect({ value, onChange, allowCreate = true }: {
 
 export function CreateProductInline({ initialName = "", onCreated, onCancel }: { initialName?: string; onCreated: (p: Product) => void; onCancel: () => void }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: initialName, category: "", unit: "籠", lowStockThreshold: 10, expiryAlertDays: 14 });
+  const [form, setForm] = useState({ name: initialName, category: "", unit: "箱", lowStockThreshold: 10, expiryAlertDays: 14 });
   const m = useMutation({
     mutationFn: () => post<Product>("/products", { ...form, name: form.name.trim(), unit: form.unit.trim(), category: form.category.trim() || null }),
     onSuccess: async (p) => {

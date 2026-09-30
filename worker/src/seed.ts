@@ -11,10 +11,10 @@ export const DEMO_ACCOUNTS = {
 };
 
 export const DEMO_PRODUCTS: ReadonlyArray<readonly [string, string, string, number, number]> = [
-  ["甘藍菜", "葉菜", "籠", 10, 14], ["高麗菜", "葉菜", "籠", 10, 14], ["大白菜", "葉菜", "籠", 8, 14],
+  ["甘藍菜", "葉菜", "箱", 10, 14], ["高麗菜", "葉菜", "箱", 10, 14], ["大白菜", "葉菜", "箱", 8, 14], ["青江菜", "葉菜", "箱", 10, 10],
   ["青花菜", "花菜", "箱", 10, 10], ["花椰菜", "花菜", "箱", 10, 10], ["紅蘿蔔", "根莖", "箱", 15, 30],
   ["白蘿蔔", "根莖", "箱", 10, 30], ["馬鈴薯", "根莖", "箱", 20, 45], ["芋頭", "根莖", "箱", 5, 45],
-  ["毛豆", "豆類", "公斤", 50, 30], ["玉米", "穀類", "箱", 10, 20], ["竹筍", "筍類", "籠", 5, 10],
+  ["毛豆", "豆類", "公斤", 50, 30], ["玉米", "穀類", "箱", 10, 20], ["竹筍", "筍類", "箱", 5, 10],
   ["南瓜", "瓜果", "箱", 8, 45], ["冬瓜", "瓜果", "箱", 5, 30], ["絲瓜", "瓜果", "箱", 5, 10],
   ["草莓", "水果", "箱", 10, 7], ["芒果", "水果", "箱", 10, 10], ["鳳梨", "水果", "箱", 10, 14],
   ["荔枝", "水果", "箱", 8, 7], ["香蕉", "水果", "箱", 10, 7],
@@ -50,7 +50,7 @@ export async function seedBase(db: Db) {
 export function seedDemoStock(db: Db, mode: "basic" | "rich" = "basic") {
   if (db.one<{ n: number }>("SELECT COUNT(*) AS n FROM Batch")!.n > 0) return;
   const admin = db.one<{ id: number }>("SELECT id FROM User WHERE username = 'admin'")!;
-  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const day = (offset: number) => new Date(Date.now() + 8 * 3_600_000 + offset * 86_400_000).toISOString().slice(0, 10); // 台灣日期
   type Row = { product: string; receivedOffset: number; expiryOffset: number; allocations: Array<[string, number]> };
   const basic: Row[] = [
     { product: "紅蘿蔔", receivedOffset: -22, expiryOffset: 20, allocations: [["A-01-01", 12], ["A-01-02", 8]] },
@@ -58,10 +58,12 @@ export function seedDemoStock(db: Db, mode: "basic" | "rich" = "basic") {
     { product: "草莓", receivedOffset: -3, expiryOffset: 3, allocations: [["B-01-01", 6]] },
     { product: "毛豆", receivedOffset: -13, expiryOffset: 25, allocations: [["B-02-01", 15]] },
   ];
-  // 示範站：42 格填 37 格、留 5 格空位；同商品多批次、幾批快到期、一批已過期
+  // 示範站：42 格填 39 格、留 3 格空位（A-04-05、A-04-06、B-03-06）；同商品多批次、幾批快到期、兩批已過期
   const rich: Row[] = [
     { product: "甘藍菜", receivedOffset: -20, expiryOffset: 12, allocations: [["A-01-01", 20], ["A-01-02", 14]] },
     { product: "甘藍菜", receivedOffset: -6, expiryOffset: 28, allocations: [["A-01-02", 6], ["A-01-03", 18]] },
+    // 驗收演示：冷凍庫 A 有一批「昨天就到期」的甘藍菜（2 箱），盤點時會標「已過期」，用來示範腐爛調整
+    { product: "甘藍菜", receivedOffset: -18, expiryOffset: -1, allocations: [["A-01-03", 2]] },
     { product: "高麗菜", receivedOffset: -15, expiryOffset: 18, allocations: [["A-01-04", 16], ["A-01-05", 20]] },
     { product: "大白菜", receivedOffset: -9, expiryOffset: 22, allocations: [["A-01-06", 12]] },
     { product: "紅蘿蔔", receivedOffset: -40, expiryOffset: 5, allocations: [["A-02-01", 18]] },
@@ -86,11 +88,14 @@ export function seedDemoStock(db: Db, mode: "basic" | "rich" = "basic") {
     { product: "毛豆", receivedOffset: -20, expiryOffset: 15, allocations: [["B-02-05", 20], ["B-02-06", 20]] },
     { product: "毛豆", receivedOffset: -3, expiryOffset: 27, allocations: [["B-03-01", 20], ["B-03-02", 8]] },
     { product: "絲瓜", receivedOffset: -4, expiryOffset: 6, allocations: [["B-03-03", 7]] },
+    // 驗收演示（先進先出）：青江菜兩批、入庫日期不同、放不同儲位；較早入庫的那批也較早到期
+    { product: "青江菜", receivedOffset: -12, expiryOffset: 6, allocations: [["B-03-04", 4]] },
+    { product: "青江菜", receivedOffset: -3, expiryOffset: 15, allocations: [["B-03-05", 8]] },
   ];
   const rows = mode === "rich" ? rich : basic;
   for (const r of rows) {
     const productId = db.one<{ id: number }>("SELECT id FROM Product WHERE name = ?", r.product)!.id;
     const allocations = r.allocations.map(([code, quantity]) => ({ locationId: db.one<{ id: number }>("SELECT id FROM Location WHERE code = ?", code)!.id, quantity }));
-    inbound(db, { productId, quantity: allocations.reduce((s, a) => s + a.quantity, 0), receivedDate: day(r.receivedOffset), expiryDate: day(r.expiryOffset), note: "示範資料", allocations }, { operator: { id: admin.id } });
+    inbound(db, { productId, quantity: allocations.reduce((s, a) => s + a.quantity, 0), receivedDate: day(r.receivedOffset), expiryDate: day(r.expiryOffset), note: "示範資料", allocations }, { operator: { id: admin.id }, allowExpiredForSeed: true });
   }
 }

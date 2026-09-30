@@ -93,7 +93,7 @@ describe("FR-020 庫存異動復原（AT-33～AT-40）", () => {
     const { batch } = await inbound30(); // A-01-04 10（容量 20）
     await staff.post("/api/stock/outbound", { productId: cabbage.id, lines: [{ batchId: batch.id, locationId: A0104, quantity: 10 }] }).expect(201); // A-01-04 清空
     const out = await lastOf("OUT");
-    // 之後又放進 15 籠新批次 → 只剩 5 的空間
+    // 之後又放進 15 箱新批次 → 只剩 5 的空間
     await staff.post("/api/stock/inbound", { productId: cabbage.id, quantity: 15, expiryDate: "2026-12-31", allocations: [{ locationId: A0104, quantity: 15 }] }).expect(201);
     const r = await admin.post(`/api/movements/${out.id}/reverse`, { reason: "出錯" });
     expect(r.status).toBe(409);
@@ -131,7 +131,7 @@ describe("FR-020 庫存異動復原（AT-33～AT-40）", () => {
     const dmg = await lastOf("DAMAGE");
     expect((await admin.post(`/api/movements/${dmg.id}/reverse`, { reason: "誤報" })).status).toBe(201);
     expect(await locQty(staff, A0103)).toBe(20);
-    const st = (await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId: batch.id, countedQty: 18 }] }).expect(201)).body;
+    const st = (await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId: batch.id, countedQty: 18, reasonCode: "DAMAGED" }] }).expect(201)).body;
     await admin.post(`/api/stocktakes/${st.id}/approve`, {}).expect(200);
     expect(await locQty(staff, A0103)).toBe(18);
     const adj = await lastOf("ADJUSTMENT");

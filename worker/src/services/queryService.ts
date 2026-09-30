@@ -2,16 +2,17 @@
 import type { Db } from "../lib/sql.js";
 import { AppError, notFound } from "../lib/errors.js";
 import { daysBetween, todayString } from "../lib/dates.js";
+import { STOCKTAKE_REASONS, stocktakeReasonText } from "./stockService.js";
 
 export interface StockLineRow {
   inventoryId: number; quantity: number;
   productId: number; productName: string; unit: string;
-  batchId: number; batchNo: string; receivedDate: string; expiryDate: string;
+  batchId: number; batchNo: string; receivedDate: string; batchCreatedAt: string; expiryDate: string;
   locationId: number; locationCode: string; rackId: number; rackCode: string; warehouseId: number; warehouseCode: string; warehouseName: string;
 }
 
 const LINE_SQL = `SELECT i.id AS inventoryId, i.quantity, p.id AS productId, p.name AS productName, p.unit,
-  b.id AS batchId, b.batchNo, b.receivedDate, b.expiryDate,
+  b.id AS batchId, b.batchNo, b.receivedDate, b.createdAt AS batchCreatedAt, b.expiryDate,
   l.id AS locationId, l.code AS locationCode, r.id AS rackId, r.code AS rackCode, w.id AS warehouseId, w.code AS warehouseCode, w.name AS warehouseName
   FROM Inventory i JOIN Batch b ON b.id = i.batchId JOIN Product p ON p.id = b.productId
   JOIN Location l ON l.id = i.locationId JOIN Rack r ON r.id = l.rackId JOIN Warehouse w ON w.id = r.warehouseId
@@ -21,7 +22,7 @@ export function toStockLine(r: StockLineRow) {
   return {
     inventoryId: r.inventoryId, quantity: r.quantity,
     product: { id: r.productId, name: r.productName, unit: r.unit },
-    batch: { id: r.batchId, batchNo: r.batchNo, receivedDate: r.receivedDate, expiryDate: r.expiryDate },
+    batch: { id: r.batchId, batchNo: r.batchNo, receivedDate: r.receivedDate, createdAt: r.batchCreatedAt, expiryDate: r.expiryDate },
     location: { id: r.locationId, code: r.locationCode, rackId: r.rackId, rackCode: r.rackCode, warehouseId: r.warehouseId, warehouseCode: r.warehouseCode, warehouseName: r.warehouseName },
   };
 }
@@ -166,19 +167,19 @@ export function listMovements(db: Db, q: { type?: string; productId?: number; ba
 // ---- 盤點查詢 ----
 export function stocktakeBaseline(db: Db, warehouseId?: number) {
   return db.all<StockLineRow>(LINE_SQL + (warehouseId ? " AND w.id = ?" : "") + " ORDER BY l.code", ...(warehouseId ? [warehouseId] : [])).map((r) => ({
-    locationId: r.locationId, locationCode: r.locationCode, batchId: r.batchId, batchNo: r.batchNo, expiryDate: r.expiryDate, product: { id: r.productId, name: r.productName, unit: r.unit }, systemQty: r.quantity,
+    locationId: r.locationId, locationCode: r.locationCode, batchId: r.batchId, batchNo: r.batchNo, receivedDate: r.receivedDate, createdAt: r.batchCreatedAt, expiryDate: r.expiryDate, product: { id: r.productId, name: r.productName, unit: r.unit }, systemQty: r.quantity,
   }));
 }
 
 function serializeStocktake(db: Db, s: Record<string, unknown>) {
-  const items = db.all<{ id: number; locationId: number; batchId: number; systemQty: number; countedQty: number; diff: number; locationCode: string; batchNo: string; expiryDate: string; productId: number; productName: string; unit: string }>(
-    `SELECT si.*, l.code AS locationCode, b.batchNo, b.expiryDate, p.id AS productId, p.name AS productName, p.unit
+  const items = db.all<{ id: number; locationId: number; batchId: number; systemQty: number; countedQty: number; diff: number; reasonCode: string | null; reasonNote: string | null; locationCode: string; batchNo: string; receivedDate: string; batchCreatedAt: string; expiryDate: string; productId: number; productName: string; unit: string }>(
+    `SELECT si.*, l.code AS locationCode, b.batchNo, b.receivedDate, b.createdAt AS batchCreatedAt, b.expiryDate, p.id AS productId, p.name AS productName, p.unit
      FROM StocktakeItem si JOIN Location l ON l.id = si.locationId JOIN Batch b ON b.id = si.batchId JOIN Product p ON p.id = b.productId WHERE si.stocktakeId = ? ORDER BY l.code`, s.id);
   const user = (id: unknown) => (id ? db.one<{ id: number; displayName: string }>("SELECT id, displayName FROM User WHERE id = ?", id) : null);
   const warehouse = s.warehouseId ? db.one<{ id: number; code: string; name: string }>("SELECT id, code, name FROM Warehouse WHERE id = ?", s.warehouseId) : null;
   return {
     ...s, warehouse, submittedBy: user(s.submittedById), reviewedBy: user(s.reviewedById),
-    items: items.map((i) => ({ id: i.id, locationId: i.locationId, locationCode: i.locationCode, batchId: i.batchId, batchNo: i.batchNo, expiryDate: i.expiryDate, product: { id: i.productId, name: i.productName, unit: i.unit }, systemQty: i.systemQty, countedQty: i.countedQty, diff: i.diff })),
+    items: items.map((i) => ({ id: i.id, locationId: i.locationId, locationCode: i.locationCode, batchId: i.batchId, batchNo: i.batchNo, receivedDate: i.receivedDate, createdAt: i.batchCreatedAt, expiryDate: i.expiryDate, product: { id: i.productId, name: i.productName, unit: i.unit }, systemQty: i.systemQty, countedQty: i.countedQty, diff: i.diff, reasonCode: i.reasonCode, reasonNote: i.reasonNote, reason: i.diff === 0 ? null : stocktakeReasonText(i.reasonCode, i.reasonNote) })),
   };
 }
 export function listStocktakes(db: Db, status?: string) {
@@ -192,7 +193,7 @@ export function getStocktake(db: Db, id: number) {
   return serializeStocktake(db, s);
 }
 /** 提交只建立待核准單（不改庫存）；記錄提交當下 systemQty 作核准基準（AT-24）。 */
-export function submitStocktake(db: Db, input: { warehouseId?: number; note?: string | null; items: Array<{ locationId: number; batchId: number; countedQty: number; systemQty?: number }> }, operatorId: number) {
+export function submitStocktake(db: Db, input: { warehouseId?: number; note?: string | null; items: Array<{ locationId: number; batchId: number; countedQty: number; systemQty?: number; reasonCode?: string | null; reasonNote?: string | null }> }, operatorId: number) {
   const keys = input.items.map((i) => `${i.locationId}:${i.batchId}`);
   if (new Set(keys).size !== keys.length) throw new AppError("VALIDATION_ERROR", 400, "同一儲位＋批次不可重複盤點");
   return db.tx(() => {
@@ -214,7 +215,17 @@ export function submitStocktake(db: Db, input: { warehouseId?: number; note?: st
           throw new AppError("LOCATION_PRODUCT_CONFLICT", 409, `無法提交：儲位 ${loc.code} 目前存放「${other.name}」，不可盤入不同商品。`, { locationId: i.locationId });
         }
       }
-      db.run("INSERT INTO StocktakeItem (stocktakeId, locationId, batchId, systemQty, countedQty, diff) VALUES (?, ?, ?, ?, ?, ?)", id, i.locationId, i.batchId, systemQty, i.countedQty, i.countedQty - systemQty);
+      // 數量不一致才需要原因；一致時不收原因
+      const diff = i.countedQty - systemQty;
+      let reasonCode: string | null = null, reasonNote: string | null = null;
+      if (diff !== 0) {
+        const loc = db.one<{ code: string }>("SELECT code FROM Location WHERE id = ?", i.locationId)!;
+        if (!i.reasonCode || !(i.reasonCode in STOCKTAKE_REASONS)) throw new AppError("STOCKTAKE_REASON_REQUIRED", 400, `無法提交：儲位 ${loc.code} 盤點數量與系統不同（差異 ${diff > 0 ? "+" : ""}${diff}），請選擇差異原因。`, { locationId: i.locationId, batchId: i.batchId, diff });
+        reasonCode = i.reasonCode;
+        reasonNote = i.reasonNote?.trim() || null;
+        if (reasonCode === "OTHER" && !reasonNote) throw new AppError("STOCKTAKE_REASON_REQUIRED", 400, `無法提交：儲位 ${loc.code} 選了「其他」，請填寫說明。`, { locationId: i.locationId, batchId: i.batchId, diff });
+      }
+      db.run("INSERT INTO StocktakeItem (stocktakeId, locationId, batchId, systemQty, countedQty, diff, reasonCode, reasonNote) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, i.locationId, i.batchId, systemQty, i.countedQty, diff, reasonCode, reasonNote);
     }
     return getStocktake(db, id);
   });

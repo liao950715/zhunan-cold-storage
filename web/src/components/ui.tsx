@@ -99,3 +99,19 @@ export function Collapsible({ label, children, defaultOpen = false }: { label: s
 export const TYPE_LABEL: Record<string, string> = { IN: "入庫", OUT: "出庫", TRANSFER: "搬移", DAMAGE: "報損", ADJUSTMENT: "盤點調整", REVERSAL: "復原" };
 export const fmtTime = (iso: string) => new Date(iso).toLocaleString("zh-TW", { hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 export const fmtDate = (d: string) => d.replace(/-/g, "/");
+/** 台灣時間 YYYY/MM/DD HH:mm */
+export const fmtClock = (dt: Date | string) => {
+  const t = new Date(new Date(dt).getTime() + 8 * 3_600_000).toISOString();
+  return `${t.slice(0, 10).replace(/-/g, "/")} ${t.slice(11, 16)}`;
+};
+/**
+ * 批次的進貨時間：當天即時入庫的批次顯示到「時:分」（系統記錄的時間）；
+ * 補登或示範資料只有日期，就只顯示日期，不假裝有時間。
+ */
+export const fmtReceived = (receivedDate: string, createdAt?: string | null) => {
+  if (createdAt) {
+    const clock = fmtClock(createdAt);
+    if (clock.slice(0, 10) === fmtDate(receivedDate)) return clock;
+  }
+  return fmtDate(receivedDate);
+};

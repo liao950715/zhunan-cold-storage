@@ -81,7 +81,7 @@ export interface StockLine {
   inventoryId: number;
   quantity: number;
   product: { id: number; name: string; unit: string };
-  batch: { id: number; batchNo: string; receivedDate: string; expiryDate: string };
+  batch: { id: number; batchNo: string; receivedDate: string; createdAt?: string; expiryDate: string };
   location: { id: number; code: string; rackId: number; rackCode: string; warehouseId: number; warehouseCode: string; warehouseName: string };
 }
 
@@ -151,7 +151,7 @@ export interface FefoSuggestion {
   requested: number;
   available: number;
   shortage: number;
-  suggestions: Array<{ batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; take: number }>;
+  suggestions: Array<{ batchId: number; batchNo: string; receivedDate: string; createdAt?: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; take: number }>;
 }
 
 export type MovementType = "IN" | "OUT" | "TRANSFER" | "DAMAGE" | "ADJUSTMENT" | "REVERSAL";
@@ -199,12 +199,25 @@ export interface StocktakeItem {
   locationCode: string;
   batchId: number;
   batchNo: string;
+  receivedDate?: string;
+  createdAt?: string;
   expiryDate: string;
   product: { id: number; name: string; unit: string };
   systemQty: number;
   countedQty: number;
   diff: number;
+  reasonCode?: StocktakeReasonCode | null;
+  reasonNote?: string | null;
+  /** 後端組好的原因文字（數量一致時為 null） */
+  reason?: string | null;
 }
+
+export type StocktakeReasonCode = "DAMAGED" | "MISSING" | "OTHER";
+export const STOCKTAKE_REASONS: Array<{ code: StocktakeReasonCode; label: string }> = [
+  { code: "DAMAGED", label: "腐爛／損壞，無法販售" },
+  { code: "MISSING", label: "找不到商品" },
+  { code: "OTHER", label: "其他" },
+];
 
 export interface Stocktake {
   id: number;
@@ -225,6 +238,8 @@ export interface BaselineItem {
   locationCode: string;
   batchId: number;
   batchNo: string;
+  receivedDate?: string;
+  createdAt?: string;
   expiryDate: string;
   product: { id: number; name: string; unit: string };
   systemQty: number;

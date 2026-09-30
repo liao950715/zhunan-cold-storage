@@ -1,3 +1,4 @@
+import { env, runInDurableObject } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Client, loginAs, locationIdByCode, locQty, movements, productByName, productTotal, snapshot } from "./helpers.js";
 
@@ -22,7 +23,7 @@ describe("Stage 2 庫存交易（Durable Object SQLite）", () => {
   });
 
   describe("入庫", () => {
-    it("AT-03：30 籠分兩儲位，各儲位正確、合計 30，並留下兩筆 IN 紀錄", async () => {
+    it("AT-03：30 箱分兩儲位，各儲位正確、合計 30，並留下兩筆 IN 紀錄", async () => {
       const body = await inbound30();
       expect(body.batch.batchNo).toMatch(BATCH_NO);
       expect(await locQty(c, A0103)).toBe(20);
@@ -91,7 +92,9 @@ describe("Stage 2 庫存交易（Durable Object SQLite）", () => {
     });
 
     it("FEFO：已過期批次仍列出並標記 expired（Q6）", async () => {
-      await c.post("/api/stock/inbound", { productId: cabbage.id, quantity: 2, expiryDate: "2020-01-01", allocations: [{ locationId: A0103, quantity: 2 }] }).expect(201);
+      // 已過期的貨不能再經 API 入庫；這裡模擬「入庫後放到過期」：直接把批次到期日改成過去
+      const r = await c.post("/api/stock/inbound", { productId: cabbage.id, quantity: 2, expiryDate: "2026-12-31", allocations: [{ locationId: A0103, quantity: 2 }] }).expect(201);
+      await runInDurableObject(env.WAREHOUSE.get(env.WAREHOUSE.idFromName("main")), async (_i, state) => { state.storage.sql.exec("UPDATE Batch SET expiryDate = '2020-01-01' WHERE id = ?", r.body.batch.id); });
       const sug = await c.post("/api/stock/outbound/suggest", { productId: cabbage.id, quantity: 1 });
       expect(sug.body.suggestions[0].expired).toBe(true);
     });
@@ -113,7 +116,7 @@ describe("Stage 2 庫存交易（Durable Object SQLite）", () => {
   });
 
   describe("搬移", () => {
-    it("AT-13：部分搬移 5 籠，來源減、目的增、總量不變，紀錄含前後數量", async () => {
+    it("AT-13：部分搬移 5 箱，來源減、目的增、總量不變，紀錄含前後數量", async () => {
       const { batch } = await inbound30();
       await c.post("/api/stock/transfer", { batchId: batch.id, fromLocationId: A0103, toLocationId: A0105, quantity: 5 }).expect(201);
       expect(await locQty(c, A0103)).toBe(15);
@@ -143,7 +146,7 @@ describe("Stage 2 庫存交易（Durable Object SQLite）", () => {
   });
 
   describe("報損", () => {
-    it("AT-19：報損 3 籠，庫存減 3 且留 DAMAGE 紀錄含原因與操作者", async () => {
+    it("AT-19：報損 3 箱，庫存減 3 且留 DAMAGE 紀錄含原因與操作者", async () => {
       const { batch } = await inbound30();
       await c.post("/api/stock/damage", { batchId: batch.id, locationId: A0103, quantity: 3, reason: "凍傷" }).expect(201);
       expect(await locQty(c, A0103)).toBe(17);

@@ -8,7 +8,7 @@ describe("FR-002 商品管理、FR-019 搜尋", () => {
     expect(r.status).toBe(201);
     expect(r.body).toMatchObject({ name: "小黃瓜", unit: "箱", status: "ACTIVE" });
     expect((await c.post("/api/products", { name: "" })).body.error.code).toBe("VALIDATION_ERROR");
-    expect((await c.post("/api/products", { name: "甘藍菜", unit: "籠" })).status).toBe(409);
+    expect((await c.post("/api/products", { name: "甘藍菜", unit: "箱" })).status).toBe(409);
   });
 
   it("停用商品後預設清單不顯示，includeInactive 才顯示；停用商品不可入庫", async () => {

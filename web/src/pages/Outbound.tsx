@@ -7,10 +7,10 @@ import FloorplanCanvas from "../features/floorplan/FloorplanCanvas";
 import { toDraft } from "../features/floorplan/geometry";
 import type { FefoSuggestion, Product, ProductStock } from "../api/types";
 import ProductSelect from "../components/ProductSelect";
-import { Message, PageTitle, Step, StepBanner, fmtDate } from "../components/ui";
+import { Message, PageTitle, Step, StepBanner, fmtDate, fmtReceived } from "../components/ui";
 import { locationWords } from "../lib/words";
 
-interface Line { batchId: number; batchNo: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; quantity: number }
+interface Line { batchId: number; batchNo: string; receivedDate: string; createdAt?: string; expiryDate: string; expired: boolean; locationId: number; locationCode: string; available: number; quantity: number }
 
 /**
  * 出庫（FR-011／012）：要出什麼 → 要出多少 → 到哪裡拿（系統建議先拿快到期的，可調整）→ 確認出庫。
@@ -42,7 +42,7 @@ export default function Outbound() {
   useEffect(() => {
     if (!stock.data || lines.length > 0 || !preset.locationId) return;
     const rows = stock.data.lines.filter((l) => l.location.id === preset.locationId && (!preset.batchId || l.batch.id === preset.batchId));
-    setLines(rows.map((l) => ({ batchId: l.batch.id, batchNo: l.batch.batchNo, expiryDate: l.batch.expiryDate, expired: l.batch.expiryDate < new Date().toISOString().slice(0, 10), locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 })));
+    setLines(rows.map((l) => ({ batchId: l.batch.id, batchNo: l.batch.batchNo, receivedDate: l.batch.receivedDate, createdAt: l.batch.createdAt, expiryDate: l.batch.expiryDate, expired: l.batch.expiryDate < new Date().toISOString().slice(0, 10), locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 })));
     setAdjusting(true);
   }, [stock.data, preset.locationId, preset.batchId, lines.length]);
 
@@ -55,9 +55,13 @@ export default function Outbound() {
   const suggestStale = suggest.data !== undefined && suggest.data.seq !== suggestSeq.current;
   const waitingSuggest = !preset.locationId && quantity > 0 && (suggest.isPending || suggestStale || (!confirming && suggest.data === undefined));
 
+  // 使用者在「從哪裡拿」改數量時，上面的出庫數量會跟著改成合計；那次改動不應該重新要建議
+  const syncingFromLines = useRef(false);
+
   // 填好數量就自動給建議（不需再按按鈕）；改數量的當下先清掉舊建議，不讓人拿舊的往下走
   useEffect(() => {
     if (preset.locationId) return;
+    if (syncingFromLines.current) { syncingFromLines.current = false; return; }
     suggestSeq.current += 1;
     setLines([]);
     if (!product || quantity <= 0) { suggest.reset(); return; }
@@ -70,7 +74,8 @@ export default function Outbound() {
   const total = lines.reduce((s, l) => s + (l.quantity || 0), 0);
   const over = lines.some((l) => l.quantity > l.available);
   const active = lines.filter((l) => l.quantity > 0);
-  const shortage = suggestStale ? 0 : (suggest.data?.shortage ?? 0);
+  // 只有「建議是針對目前數量算的」時才顯示不足（手動調整過就以各儲位合計為準）
+  const shortage = suggestStale || suggest.data?.requested !== quantity ? 0 : (suggest.data?.shortage ?? 0);
 
   const stepText = (() => {
     if (!product) return "要出什麼？請先選商品";
@@ -97,7 +102,15 @@ export default function Outbound() {
     onError: () => setConfirming(false),
   });
 
-  const setQty = (i: number, q: number) => setLines(lines.map((l, j) => (j === i ? { ...l, quantity: q } : l)));
+  /** 改某個儲位要拿多少：限制在 0～該儲位現有數量，並把上面的出庫數量同步成合計 */
+  const setQty = (i: number, q: number) => {
+    const next = lines.map((l, j) => (j === i ? { ...l, quantity: Math.max(0, Math.min(l.available, Math.floor(Number.isFinite(q) ? q : 0))) } : l));
+    setLines(next);
+    if (!preset.locationId) {
+      const sum = next.reduce((s, l) => s + l.quantity, 0);
+      if (sum !== quantity) { syncingFromLines.current = true; setQuantity(sum); }
+    }
+  };
   const unit = product?.unit ?? "";
 
   // 平面圖：把要取貨的位置整格標出「取 N 箱」；點圖上有這個商品的格子可以加進來
@@ -117,8 +130,7 @@ export default function Outbound() {
     if (i < 0) { setMapHint(`${code} 沒有「${product?.name ?? "這個商品"}」，請點有這個商品的格子。`); return; }
     const l = lines[i];
     if (l.quantity > 0) { setAdjusting(true); return; }
-    const need = Math.max(0, quantity - total);
-    setQty(i, Math.min(l.available, need > 0 ? need : l.available));
+    setQty(i, 1); // 加進來先取 1，在下面改成要的數量；上面的出庫數量會跟著變
     setAdjusting(true);
   }
 
@@ -148,7 +160,7 @@ export default function Outbound() {
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{product.name}，出庫 {total} {unit}</p>
           {active.map((l) => (
-            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}<span className="ml-2 muted">到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
+            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}<span className="ml-2 muted">進貨 {fmtReceived(l.receivedDate, l.createdAt)}・到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
           ))}
         </div>
         {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
@@ -174,9 +186,10 @@ export default function Outbound() {
       {!preset.locationId && (
         <Step n={2} title="要出多少？" done={quantity > 0}>
           <div className="flex items-center gap-3">
-            <input type="number" min={1} inputMode="numeric" className="input mt-0 max-w-[200px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Number(e.target.value))} disabled={!product} aria-label="出庫數量" />
+            <input type="number" min={1} inputMode="numeric" className="input mt-0 max-w-[200px] text-[24px] font-bold" value={quantity || ""} onChange={(e) => setQuantity(Math.max(0, Math.floor(Number(e.target.value) || 0)))} disabled={!product} aria-label="出庫數量" />
             <span className="text-[24px] font-bold">{unit}</span>
           </div>
+          {lines.length > 0 && <p className="mt-2 muted">出庫數量＝下面各取貨位置的合計；在下面改數量，這裡會自動跟著變。</p>}
           {shortage > 0 && <Message kind="warn">庫存只有 {suggest.data!.available} {unit}，不夠 {shortage} {unit}。可以先出 {suggest.data!.available} {unit}，或改數量。</Message>}
         </Step>
       )}
@@ -193,7 +206,7 @@ export default function Outbound() {
                   <div className="flex-1">
                     <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}{i === 0 && !preset.locationId && <span className="tag-info ml-2 align-middle text-[14px]">最早到期</span>}</p>
                     <p className="muted">
-                      這裡有 {l.available} {unit}・到期 {fmtDate(l.expiryDate)}
+                      這裡有 {l.available} {unit}・進貨 {fmtReceived(l.receivedDate, l.createdAt)}・到期 {fmtDate(l.expiryDate)}
                       {l.expired && <span className="tag-bad ml-2">已過期</span>}
                       <span className="ml-2">批次 {l.batchNo}</span>
                     </p>

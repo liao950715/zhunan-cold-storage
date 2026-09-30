@@ -47,5 +47,6 @@ export function useInvalidateStock() {
   ]);
 }
 
-export const todayStr = () => new Date().toISOString().slice(0, 10);
-export const addDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+/** 「今天」以台灣時間（UTC+8）為準，與後端的到期判斷一致。 */
+export const todayStr = () => new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+export const addDays = (days: number) => new Date(Date.now() + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);

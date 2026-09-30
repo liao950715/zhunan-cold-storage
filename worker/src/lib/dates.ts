@@ -6,5 +6,6 @@ export const dateString = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式須為 YYYY-MM-DD")
   .refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)), "日期無效");
 
-export const todayString = () => new Date().toISOString().slice(0, 10);
+/** 「今天」以台灣時間（UTC+8）為準：凌晨 0～8 點不會被當成前一天。 */
+export const todayString = () => new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
 export const daysBetween = (fromYmd: string, toYmd: string) => Math.round((Date.parse(`${toYmd}T00:00:00Z`) - Date.parse(`${fromYmd}T00:00:00Z`)) / 86_400_000);

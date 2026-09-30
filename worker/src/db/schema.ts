@@ -2,7 +2,7 @@
  * 資料表定義（對應 docs/DATABASE_DESIGN.md）。
  * 在 Durable Object 的 SQLite 內執行；Inventory.quantity 的 CHECK 是最後防線。
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS StocktakeItem (
   systemQty INTEGER NOT NULL,
   countedQty INTEGER NOT NULL CHECK (countedQty >= 0),
   diff INTEGER NOT NULL,
+  reasonCode TEXT,
+  reasonNote TEXT,
   UNIQUE (stocktakeId, locationId, batchId)
 );
 
@@ -180,6 +182,13 @@ CREATE INDEX IF NOT EXISTS Movement_type_time ON StockMovement(type, createdAt);
 CREATE INDEX IF NOT EXISTS Movement_product ON StockMovement(productId);
 CREATE INDEX IF NOT EXISTS Movement_batch ON StockMovement(batchId);
 UPDATE meta SET value = '2' WHERE key = 'schemaVersion';
+`;
+
+/** v3 → v4：盤點差異原因（腐爛／損壞、找不到、其他＋備註）。 */
+export const MIGRATE_V3_TO_V4 = `
+ALTER TABLE StocktakeItem ADD COLUMN reasonCode TEXT;
+ALTER TABLE StocktakeItem ADD COLUMN reasonNote TEXT;
+UPDATE meta SET value = '4' WHERE key = 'schemaVersion';
 `;
 
 /** v2 → v3：防重送識別碼綁定請求內容（審查 #5）。 */

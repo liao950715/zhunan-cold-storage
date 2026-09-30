@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { get } from "../../api/client";
 import type { LocationDetail } from "../../api/types";
-import { fmtDate } from "../../components/ui";
+import { fmtDate, fmtReceived } from "../../components/ui";
 import { locationWords } from "../../lib/words";
 
 /** 檢視模式側欄：儲位目前商品、各批次數量與容量，以及入庫／出庫／搬移入口。 */
@@ -32,7 +32,7 @@ export default function LocationPanel({ locationId, onAction }: { locationId: nu
         <div className="divide-y divide-line">
           {d.lines.map((l) => (
             <div key={l.inventoryId} className="flex items-center justify-between py-2 text-[16px]">
-              <span>到期 {fmtDate(l.batch.expiryDate)}<span className="ml-2 text-ink-2">批次 {l.batch.batchNo}</span></span>
+              <span>進貨 {fmtReceived(l.batch.receivedDate, l.batch.createdAt)}・到期 {fmtDate(l.batch.expiryDate)}<span className="ml-2 text-ink-2">批次 {l.batch.batchNo}</span></span>
               <b>{l.quantity} {l.product.unit}</b>
             </div>
           ))}

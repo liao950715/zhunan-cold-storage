@@ -12,6 +12,8 @@ export interface Ctx {
   idempotencyKey?: string;
   /** 請求內容指紋（路徑＋標準化 body）；同 key 不同內容 → 拒絕，不回放舊結果 */
   requestFingerprint?: string;
+  /** 只給種子資料用（示範「已過期批次」）；API 路由永遠不會設這個旗標 */
+  allowExpiredForSeed?: boolean;
 }
 
 /** 標準化 JSON（鍵排序），讓同樣內容產生同樣指紋。 */
@@ -140,6 +142,10 @@ export interface InboundInput {
 export function inbound(db: Db, input: InboundInput, ctx: Ctx) {
   return runStockTx(db, ctx, () => {
     const product = loadProduct(db, input.productId);
+    // 到期日早於今天（台灣時間）＝已過期，不能入庫；今天到期仍可入庫（前端會明顯警告）
+    if (!ctx.allowExpiredForSeed && input.expiryDate < todayString()) {
+      throw new AppError("EXPIRED_ON_ARRIVAL", 400, `此商品已過期，無法入庫，請確認到期日。（到期日 ${input.expiryDate}，今天 ${todayString()}）`, { expiryDate: input.expiryDate, today: todayString() });
+    }
     const sum = input.allocations.reduce((s, a) => s + a.quantity, 0);
     if (sum !== input.quantity) {
       throw new AppError("ALLOCATION_MISMATCH", 409, `無法入庫：分配合計 ${sum} ${product.unit} 不等於入庫量 ${input.quantity} ${product.unit}。請調整各儲位數量。`, { allocated: sum, quantity: input.quantity });
@@ -157,8 +163,9 @@ export function inbound(db: Db, input: InboundInput, ctx: Ctx) {
       const { before, after } = addInventory(db, batchId, a.locationId, a.quantity);
       return createMovement(db, ctx.operator.id, { type: "IN", productId: product.id, productName: product.name, batchId, quantity: a.quantity, to: { locationId: a.locationId, code: locs[i].code, before, after }, referenceType: "INBOUND", referenceId: batchId, reason: input.note });
     });
+    const createdAt = db.one<{ createdAt: string }>("SELECT createdAt FROM Batch WHERE id = ?", batchId)!.createdAt;
     return {
-      batch: { id: batchId, batchNo, productId: product.id, receivedDate, expiryDate: input.expiryDate, initialQty: input.quantity, note: input.note ?? null },
+      batch: { id: batchId, batchNo, productId: product.id, receivedDate, createdAt, expiryDate: input.expiryDate, initialQty: input.quantity, note: input.note ?? null },
       allocations: input.allocations.map((a, i) => ({ locationId: a.locationId, locationCode: locs[i].code, quantity: a.quantity })),
       movementIds,
     };
@@ -170,15 +177,15 @@ export function inbound(db: Db, input: InboundInput, ctx: Ctx) {
 export function suggestFefo(db: Db, productId: number, quantity: number, today = todayString()) {
   const product = db.one<ProductRow>("SELECT id, name, unit, status FROM Product WHERE id = ?", productId);
   if (!product) throw notFound("商品");
-  const rows = db.all<{ batchId: number; batchNo: string; expiryDate: string; locationId: number; locationCode: string; quantity: number }>(
-    `SELECT i.batchId, b.batchNo, b.expiryDate, i.locationId, l.code AS locationCode, i.quantity
+  const rows = db.all<{ batchId: number; batchNo: string; receivedDate: string; createdAt: string; expiryDate: string; locationId: number; locationCode: string; quantity: number }>(
+    `SELECT i.batchId, b.batchNo, b.receivedDate, b.createdAt, b.expiryDate, i.locationId, l.code AS locationCode, i.quantity
      FROM Inventory i JOIN Batch b ON b.id = i.batchId JOIN Location l ON l.id = i.locationId
      WHERE i.quantity > 0 AND b.productId = ? ORDER BY b.expiryDate, b.receivedDate, l.code`, productId);
   let remaining = quantity;
   const suggestions = rows.map((r) => {
     const take = Math.min(remaining, r.quantity);
     remaining -= take;
-    return { batchId: r.batchId, batchNo: r.batchNo, expiryDate: r.expiryDate, expired: r.expiryDate < today, locationId: r.locationId, locationCode: r.locationCode, available: r.quantity, take };
+    return { batchId: r.batchId, batchNo: r.batchNo, receivedDate: r.receivedDate, createdAt: r.createdAt, expiryDate: r.expiryDate, expired: r.expiryDate < today, locationId: r.locationId, locationCode: r.locationCode, available: r.quantity, take };
   });
   const available = rows.reduce((s, r) => s + r.quantity, 0);
   return { product: { id: product.id, name: product.name, unit: product.unit }, requested: quantity, available, shortage: Math.max(0, remaining), suggestions };
@@ -240,13 +247,21 @@ export function damage(db: Db, input: DamageInput, ctx: Ctx) {
 
 // ---------- 盤點核准／退回（FR-015，僅 ADMIN；路由層檢查） ----------
 
+/** 盤點差異原因（數量不一致時必填）。 */
+export const STOCKTAKE_REASONS = { DAMAGED: "腐爛／損壞，無法販售", MISSING: "找不到商品", OTHER: "其他" } as const;
+export type StocktakeReasonCode = keyof typeof STOCKTAKE_REASONS;
+export function stocktakeReasonText(code: string | null, note: string | null) {
+  const label = code && code in STOCKTAKE_REASONS ? STOCKTAKE_REASONS[code as StocktakeReasonCode] : "未填";
+  return note ? `${label}（${note}）` : label;
+}
+
 export function approveStocktake(db: Db, stocktakeId: number, reviewNote: string | null, ctx: Ctx) {
   return runStockTx(db, ctx, () => {
     const st = db.one<{ id: number; status: string }>("SELECT id, status FROM Stocktake WHERE id = ?", stocktakeId);
     if (!st) throw notFound("盤點單");
     if (st.status !== "PENDING") throw new AppError("STOCKTAKE_NOT_PENDING", 409, `盤點單 #${st.id} 已${st.status === "APPROVED" ? "核准" : "退回"}，不可再操作`);
-    const items = db.all<{ id: number; locationId: number; batchId: number; systemQty: number; countedQty: number; diff: number; locationCode: string; batchNo: string; productId: number; productName: string }>(
-      `SELECT si.id, si.locationId, si.batchId, si.systemQty, si.countedQty, si.diff, l.code AS locationCode, b.batchNo, b.productId, p.name AS productName
+    const items = db.all<{ id: number; locationId: number; batchId: number; systemQty: number; countedQty: number; diff: number; reasonCode: string | null; reasonNote: string | null; locationCode: string; batchNo: string; productId: number; productName: string }>(
+      `SELECT si.id, si.locationId, si.batchId, si.systemQty, si.countedQty, si.diff, si.reasonCode, si.reasonNote, l.code AS locationCode, b.batchNo, b.productId, p.name AS productName
        FROM StocktakeItem si JOIN Location l ON l.id = si.locationId JOIN Batch b ON b.id = si.batchId JOIN Product p ON p.id = b.productId WHERE si.stocktakeId = ?`, st.id);
     const conflicts = items.flatMap((item) => {
       const current = db.one<{ quantity: number }>("SELECT quantity FROM Inventory WHERE batchId = ? AND locationId = ?", item.batchId, item.locationId)?.quantity ?? 0;
@@ -265,7 +280,7 @@ export function approveStocktake(db: Db, stocktakeId: number, reviewNote: string
       }
       const r = item.diff > 0 ? addInventory(db, item.batchId, item.locationId, item.diff) : removeInventory(db, item.batchId, item.locationId, -item.diff, label);
       const side = { locationId: item.locationId, code: item.locationCode, ...r };
-      movementIds.push(createMovement(db, ctx.operator.id, { type: "ADJUSTMENT", productId: item.productId, productName: item.productName, batchId: item.batchId, quantity: Math.abs(item.diff), ...(item.diff > 0 ? { to: side } : { from: side }), reason: `盤點 #${st.id} 核准調整（實盤 ${item.countedQty}）${reviewNote ? "：" + reviewNote : ""}`, referenceType: "STOCKTAKE", referenceId: st.id }));
+      movementIds.push(createMovement(db, ctx.operator.id, { type: "ADJUSTMENT", productId: item.productId, productName: item.productName, batchId: item.batchId, quantity: Math.abs(item.diff), ...(item.diff > 0 ? { to: side } : { from: side }), reason: `盤點 #${st.id} 核准調整（系統 ${item.systemQty}→實盤 ${item.countedQty}）・原因：${stocktakeReasonText(item.reasonCode, item.reasonNote)}${reviewNote ? "・審核備註：" + reviewNote : ""}`, referenceType: "STOCKTAKE", referenceId: st.id }));
     }
     db.run("UPDATE Stocktake SET status = 'APPROVED', reviewedById = ?, reviewedAt = ?, reviewNote = ? WHERE id = ?", ctx.operator.id, new Date().toISOString(), reviewNote, st.id);
     return { stocktakeId: st.id, status: "APPROVED" as const, adjustments: movementIds.length, movementIds };

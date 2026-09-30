@@ -10,7 +10,12 @@ export const ACCOUNTS = { admin: { username: "admin", password: "admin1234" }, s
 /** 配對＋登入（走真正的 UI）。 */
 export async function pairAndLogin(page: Page, who: keyof typeof ACCOUNTS) {
   await page.goto("/pair");
-  await page.getByLabel("同步碼").fill(SYNC_CODE);
+  await page.waitForLoadState("networkidle"); // 程式剛改完時 Vite 可能重新載入頁面，填太早會被清掉
+  const code = page.getByLabel("同步碼");
+  await expect(async () => {
+    await code.fill(SYNC_CODE);
+    await expect(code).toHaveValue(SYNC_CODE, { timeout: 1000 });
+  }).toPass({ timeout: 15000 });
   await page.getByRole("button", { name: "配對這台裝置" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.getByLabel("帳號").fill(ACCOUNTS[who].username);

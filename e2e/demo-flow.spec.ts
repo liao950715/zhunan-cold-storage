@@ -12,12 +12,13 @@ test.describe.serial("整合展示情境（AT-03/13/11/19/25、AT-08）", () => 
     await page.close();
   });
 
-  test("入庫 30 籠分兩儲位 → 搬移 5 → 出庫 10 → 報損 3 ＝ 17，重新整理後仍為 17", async ({ page }) => {
+  test("入庫 30 箱分兩儲位 → 搬移 5 → 出庫 10 → 報損 3 ＝ 17，重新整理後仍為 17", async ({ page }) => {
     await pairAndLogin(page, "staff");
 
     // ---- 入庫（AT-03、AT-04 即時提示）----
     await page.goto("/inbound");
-    await selectByText(page.getByRole("listbox", { name: "商品" }).or(page.getByRole("combobox", { name: "商品", exact: true })), "甘藍菜");
+    await page.getByRole("radio", { name: /甘藍菜/ }).click();
+    await expect(page.getByText("目前選擇：甘藍菜")).toBeVisible();
     await page.getByLabel("數量").fill("30");
     await page.getByRole("button", { name: "30 天後" }).click();
     await page.getByRole("button", { name: "分到其他儲位" }).click();
@@ -26,11 +27,11 @@ test.describe.serial("整合展示情境（AT-03/13/11/19/25、AT-08）", () => 
     await selectByText(selects.nth(1), "A-01-04");
     await page.getByLabel("第 1 個儲位數量").fill("20");
     await page.getByLabel("第 2 個儲位數量").fill("5");
-    await expect(page.getByText("還有 5 籠 沒分配").first()).toBeVisible(); // AT-04：合計不符不可送出
+    await expect(page.getByText("還有 5 箱 沒分配").first()).toBeVisible(); // AT-04：合計不符不可送出
     await expect(page.getByRole("button", { name: "下一步：核對並入庫" })).toBeDisabled();
     await page.getByLabel("第 2 個儲位數量").fill("10");
     await page.getByRole("button", { name: "下一步：核對並入庫" }).click();
-    await expect(page.getByText("甘藍菜，入庫 30 籠")).toBeVisible();
+    await expect(page.getByText("甘藍菜，入庫 30 箱")).toBeVisible();
     await page.getByRole("button", { name: "確認入庫" }).click();
     await expect(page.getByText("✓ 入庫完成")).toBeVisible();
     const cabbage = await productByName(page, "甘藍菜");
@@ -52,12 +53,13 @@ test.describe.serial("整合展示情境（AT-03/13/11/19/25、AT-08）", () => 
 
     // ---- 出庫 10（AT-11：建議先到期先出，人工確認）----
     await page.goto("/outbound");
-    await selectByText(page.getByRole("listbox", { name: "商品" }).or(page.getByRole("combobox", { name: "商品", exact: true })), "甘藍菜");
+    await page.getByRole("radio", { name: /甘藍菜/ }).click();
+    await expect(page.getByText("目前選擇：甘藍菜")).toBeVisible();
     await page.getByLabel("出庫數量").fill("10");
-    await expect(page.getByText(/從 A-01-0\d 取 \d+ 籠/).first()).toBeVisible();
+    await expect(page.getByText(/從 A-01-0\d 取 \d+ 箱/).first()).toBeVisible();
     await expect(page.getByText("最早到期").first()).toBeVisible();
     await page.getByRole("button", { name: "下一步：核對並出庫" }).click();
-    await expect(page.getByText("甘藍菜，出庫 10 籠")).toBeVisible();
+    await expect(page.getByText("甘藍菜，出庫 10 箱")).toBeVisible();
     await page.getByRole("button", { name: "確認出庫" }).click();
     await expect(page.getByText("✓ 出庫完成")).toBeVisible();
     expect((await api(page, "GET", `/products/${cabbage.id}/stock`)).total).toBe(20);
@@ -73,9 +75,9 @@ test.describe.serial("整合展示情境（AT-03/13/11/19/25、AT-08）", () => 
 
     // ---- 查庫存 = 17，重新整理後仍 17（AT-08）----
     await page.goto("/inventory?q=甘藍菜");
-    await expect(page.getByText(/甘藍菜\s*17 籠/)).toBeVisible();
+    await expect(page.getByText(/甘藍菜\s*17 箱/)).toBeVisible();
     await page.reload();
-    await expect(page.getByText(/甘藍菜\s*17 籠/)).toBeVisible();
+    await expect(page.getByText(/甘藍菜\s*17 箱/)).toBeVisible();
     const stock = await api(page, "GET", `/products/${cabbage.id}/stock`);
     expect(stock.total).toBe(17);
     expect(stock.lines.reduce((s: number, l: { quantity: number }) => s + l.quantity, 0)).toBe(17);

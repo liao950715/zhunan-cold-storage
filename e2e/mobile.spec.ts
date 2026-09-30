@@ -35,7 +35,7 @@ test.describe("手機寬度", () => {
     const box = (await approve.boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
     await page.getByRole("button", { name: "看明細" }).first().click();
-    await expect(page.getByText(/系統 \d+ → 實盤 \d+/).first()).toBeVisible();
+    await expect(page.getByText(/系統 \d+ 箱 → 實盤 \d+ 箱/).first()).toBeVisible();
   });
 
   test("手機：搬移預設大字列表，點列表也能選起點與終點", async ({ page }) => {

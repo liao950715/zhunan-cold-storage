@@ -6,7 +6,7 @@ import { addDays, todayStr, useAllLocations, useInvalidateStock, useProducts } f
 import type { Product } from "../api/types";
 import LocationPicker from "../components/LocationPicker";
 import ProductSelect from "../components/ProductSelect";
-import { Collapsible, Field, Message, PageTitle, Step, StepBanner, fmtDate } from "../components/ui";
+import { Collapsible, Field, Message, PageTitle, Step, StepBanner, fmtClock, fmtDate, fmtReceived } from "../components/ui";
 import { locationWords } from "../lib/words";
 
 interface Alloc { locationId: number | null; quantity: number }
@@ -30,7 +30,15 @@ export default function Inbound() {
   const [allocs, setAllocs] = useState<Alloc[]>([{ locationId: presetLocation, quantity: 0 }]);
   const [split, setSplit] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<{ batchNo: string; allocations: Array<{ locationCode: string; quantity: number }> } | null>(null);
+  const [result, setResult] = useState<{ batchNo: string; receivedDate: string; createdAt?: string; allocations: Array<{ locationCode: string; quantity: number }> } | null>(null);
+  const [backdate, setBackdate] = useState(false);
+  // 進貨時間：畫面上一直顯示「現在」，按「確認入庫」那一刻由系統記錄
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 30_000); return () => clearInterval(t); }, []);
+  const today = todayStr();
+  const expired = !!expiryDate && expiryDate < today;
+  const expiresToday = expiryDate === today;
+  const receivedText = receivedDate === today ? fmtClock(now) : `${fmtDate(receivedDate)}（補登日期）`;
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
 
   // 從儲位入口：若該儲位已有商品，自動帶入該商品（AT-18）
@@ -52,6 +60,7 @@ export default function Inbound() {
   if (!product) missing.push("選擇商品");
   if (quantity <= 0) missing.push("輸入數量");
   if (!expiryDate) missing.push("填到期日");
+  if (expired) missing.push("到期日已過，無法入庫");
   if (allocs.some((a) => !a.locationId)) missing.push("選擇放置位置");
   if (split && allocs.some((a) => a.quantity <= 0)) missing.push("填每個儲位的數量");
   if (mismatch) missing.push(`分配合計 ${allocated} 要等於入庫量 ${quantity}`);
@@ -60,6 +69,7 @@ export default function Inbound() {
     if (!product) return "請先選擇商品（找不到可以按「找不到？新增商品」）";
     if (quantity <= 0) return `請輸入數量（單位：${product.unit}）`;
     if (!expiryDate) return "請確認到期日";
+    if (expired) return "此商品已過期，無法入庫，請確認到期日";
     const missingLoc = allocs.findIndex((a) => !a.locationId);
     if (missingLoc >= 0) return split ? `請選第 ${missingLoc + 1} 個儲位（用下拉或直接點圖上的格子）` : "請選放置位置（用下拉或直接點圖上的格子）";
     const missingQty = allocs.findIndex((a) => a.quantity <= 0);
@@ -77,13 +87,13 @@ export default function Inbound() {
 
   const m = useMutation({
     mutationFn: () =>
-      post<{ batch: { batchNo: string }; allocations: Array<{ locationCode: string; quantity: number }> }>(
+      post<{ batch: { batchNo: string; receivedDate: string; createdAt?: string }; allocations: Array<{ locationCode: string; quantity: number }> }>(
         "/stock/inbound",
         { productId: product!.id, quantity, expiryDate, receivedDate, note: note || null, allocations: allocs.map((a) => ({ locationId: a.locationId!, quantity: a.quantity })) },
         idemKey,
       ),
     onSuccess: async (r) => {
-      setResult({ batchNo: r.batch.batchNo, allocations: r.allocations });
+      setResult({ batchNo: r.batch.batchNo, receivedDate: r.batch.receivedDate, createdAt: r.batch.createdAt, allocations: r.allocations });
       await invalidate();
       setIdemKey(crypto.randomUUID());
       setConfirming(false);
@@ -91,6 +101,8 @@ export default function Inbound() {
       setSplit(false);
       setAllocs([{ locationId: presetLocation, quantity: 0 }]);
       setNote("");
+      setReceivedDate(todayStr());
+      setBackdate(false);
     },
     onError: () => setConfirming(false),
   });
@@ -103,6 +115,7 @@ export default function Inbound() {
           <p className="text-[26px] font-bold text-ok">✓ 入庫完成</p>
           <p className="text-[22px] font-bold">{product?.name}，共 {result.allocations.reduce((s, a) => s + a.quantity, 0)} {product?.unit}</p>
           {result.allocations.map((a) => <p key={a.locationCode} className="text-[20px]">放在 <b>{a.locationCode}</b>：{a.quantity} {product?.unit}</p>)}
+          <p className="text-[20px]">進貨時間：<b>{fmtReceived(result.receivedDate, result.createdAt)}</b>（系統已記錄）</p>
           <p className="muted">批次編號 {result.batchNo}（系統自動產生）</p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -125,13 +138,16 @@ export default function Inbound() {
             const loc = locName(a.locationId);
             return <p key={i} className="text-[22px]">放在 <b>{loc?.code}</b><span className="ml-2 text-[18px] text-ink-2">{loc ? locationWords(loc.code) : ""}</span>{split && <>：{a.quantity} {product.unit}</>}</p>;
           })}
+          <p className="text-[20px]">進貨時間：<b>{receivedText}</b>{receivedDate === today && <span className="ml-2 text-[16px] text-ink-2">按下確認時系統自動記錄</span>}</p>
           <p className="text-[20px]">到期日 {fmtDate(expiryDate)}</p>
-          {(receivedDate !== todayStr() || note) && <p className="muted">入庫日期 {fmtDate(receivedDate)}{note && `・備註：${note}`}</p>}
+          {expired && <Message kind="error">此商品已過期，無法入庫，請確認到期日。</Message>}
+          {expiresToday && <Message kind="warn">此商品今天到期，請確認是否仍要入庫。</Message>}
+          {note && <p className="muted">備註：{note}</p>}
         </div>
         {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
         <div className="flex flex-wrap gap-3">
           <button className="btn" onClick={() => setConfirming(false)}>返回修改</button>
-          <button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending}>{m.isPending ? "入庫中…" : "確認入庫"}</button>
+          <button className="btn-primary" onClick={() => m.mutate()} disabled={m.isPending || expired}>{m.isPending ? "入庫中…" : "確認入庫"}</button>
         </div>
       </div>
     );
@@ -154,7 +170,20 @@ export default function Inbound() {
         </div>
       </Step>
 
-      <Step n={3} title="確認到期日" done={!!expiryDate}>
+      <Step n={3} title="進貨時間與到期日" done={!!expiryDate && !expired}>
+        <div className="mb-4 rounded-[10px] bg-bg-2 px-4 py-3">
+          <p className="text-[22px]">進貨時間：<b>{receivedText}</b></p>
+          <p className="muted">{receivedDate === today ? "按「確認入庫」時，系統自動記錄進貨日期與時間，之後出庫會依批次先後排列。" : "補登的貨只記錄日期。"}</p>
+          {!backdate ? (
+            <button type="button" className="btn-sm mt-2" onClick={() => setBackdate(true)}>貨是之前到的？補登進貨日期</button>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <input type="date" className="input mt-0 max-w-[220px]" max={today} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value || today)} aria-label="進貨日期" />
+              <button type="button" className="btn-sm" onClick={() => { setReceivedDate(today); setBackdate(false); }}>改回今天</button>
+            </div>
+          )}
+        </div>
+        <p className="mb-2 text-[18px] font-bold">到期日：</p>
         <div className="mb-3 flex flex-wrap gap-2">
           {[7, 14, 30, 60].map((d) => (
             <button key={d} type="button" className={expiryDate === addDays(d) ? "btn-primary" : "btn"} onClick={() => setExpiryDate(addDays(d))}>{d} 天後</button>
@@ -162,6 +191,8 @@ export default function Inbound() {
         </div>
         <input type="date" className="input mt-0 max-w-[260px]" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} aria-label="到期日" />
         <p className="mt-1 muted">請依實際保存期限填寫或修改，系統不會自行推算。目前：{fmtDate(expiryDate)}</p>
+        {expired && <div className="mt-3"><Message kind="error">此商品已過期，無法入庫，請確認到期日。</Message></div>}
+        {expiresToday && <div className="mt-3"><Message kind="warn">此商品今天到期，請確認是否仍要入庫。</Message></div>}
       </Step>
 
       <Step n={4} title="選擇放置位置" done={allocs.every((a) => a.locationId) && !mismatch}>
@@ -199,9 +230,8 @@ export default function Inbound() {
         </div>
       </Step>
 
-      <Collapsible label="其他資料（入庫日期、備註）">
+      <Collapsible label="其他資料（備註）">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="入庫日期"><input type="date" className="input" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} /></Field>
           <Field label="備註"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         </div>
       </Collapsible>
@@ -210,7 +240,7 @@ export default function Inbound() {
         {missing.length > 0 ? (
           <p className="text-[18px] text-warn">還差：{missing.join("、")}</p>
         ) : (
-          <p className="text-[20px]"><b>{product!.name}</b> {quantity} {product!.unit}，放在 <b>{allocs.map((a) => locName(a.locationId)?.code).join("、")}</b>，到期 {fmtDate(expiryDate)}</p>
+          <p className="text-[20px]"><b>{product!.name}</b> {quantity} {product!.unit}，放在 <b>{allocs.map((a) => locName(a.locationId)?.code).join("、")}</b>，進貨 {receivedText}，到期 {fmtDate(expiryDate)}</p>
         )}
         <button type="button" className="btn-primary mt-4 w-full sm:w-auto" disabled={missing.length > 0} onClick={() => setConfirming(true)}>下一步：核對並入庫</button>
       </Step>

@@ -19,7 +19,7 @@ describe("審查修正（後端不變量）", () => {
 
   it("I-10：盤點核准不可超過容量（容量 20、目前 20、實盤 25 → 409，庫存不變）", async () => {
     const batchId = (await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 20, expiryDate: "2026-12-31", allocations: [{ locationId: A0103, quantity: 20 }] }).expect(201)).body.batch.id;
-    const st = (await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId, countedQty: 25 }] }).expect(201)).body;
+    const st = (await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId, countedQty: 25, reasonCode: "OTHER", reasonNote: "多出來" }] }).expect(201)).body;
     const r = await admin.post(`/api/stocktakes/${st.id}/approve`, {});
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe("CAPACITY_EXCEEDED");
@@ -32,11 +32,11 @@ describe("審查修正（後端不變量）", () => {
     const cabbageBatch = (await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 5, expiryDate: "2026-12-31", allocations: [{ locationId: A0103, quantity: 5 }] }).expect(201)).body.batch.id;
     const carrotBatch = (await staff.post("/api/stock/inbound", { productId: carrot, quantity: 5, expiryDate: "2026-12-31", allocations: [{ locationId: A0104, quantity: 5 }] }).expect(201)).body.batch.id;
     // 提交：A-01-03 放甘藍菜，卻盤入紅蘿蔔批次 3 個
-    const r = await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId: carrotBatch, countedQty: 3 }] });
+    const r = await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId: carrotBatch, countedQty: 3, reasonCode: "OTHER", reasonNote: "x" }] });
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe("LOCATION_PRODUCT_CONFLICT");
     // 核准：提交時 A-01-05 是空的（合法），核准前先放入甘藍菜 → 核准時擋混放
-    const st = (await staff.post("/api/stocktakes", { items: [{ locationId: A0105, batchId: carrotBatch, countedQty: 2 }] }).expect(201)).body;
+    const st = (await staff.post("/api/stocktakes", { items: [{ locationId: A0105, batchId: carrotBatch, countedQty: 2, reasonCode: "OTHER", reasonNote: "x" }] }).expect(201)).body;
     await staff.post("/api/stock/transfer", { batchId: cabbageBatch, fromLocationId: A0103, toLocationId: A0105, quantity: 2 }).expect(201);
     const a = await admin.post(`/api/stocktakes/${st.id}/approve`, {});
     expect(a.status).toBe(409);
@@ -48,7 +48,7 @@ describe("審查修正（後端不變量）", () => {
     const batchId = (await staff.post("/api/stock/inbound", { productId: cabbageId, quantity: 20, expiryDate: "2026-12-31", allocations: [{ locationId: A0103, quantity: 20 }] }).expect(201)).body.batch.id;
     // 畫面基準 20；別人出庫 5
     await staff.post("/api/stock/outbound", { productId: cabbageId, lines: [{ batchId, locationId: A0103, quantity: 5 }] }).expect(201);
-    const r = await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId, countedQty: 20, systemQty: 20 }] });
+    const r = await staff.post("/api/stocktakes", { items: [{ locationId: A0103, batchId, countedQty: 20, systemQty: 20, reasonCode: "DAMAGED" }] });
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe("STOCKTAKE_BASELINE_CHANGED");
     // 重新整理後基準 15 → 可提交

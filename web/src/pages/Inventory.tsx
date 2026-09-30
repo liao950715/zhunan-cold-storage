@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { get } from "../api/client";
 import type { SearchResult, StockLine } from "../api/types";
-import { Card, Collapsible, PageTitle, fmtDate } from "../components/ui";
+import { Card, Collapsible, PageTitle, fmtDate, fmtReceived } from "../components/ui";
 import SearchBox from "../components/SearchBox";
 
 /** 查庫存（FR-019）：先看「商品、總量、位置、最近到期日」，展開才看各批次；不同單位分開。 */
@@ -65,7 +65,7 @@ export default function Inventory() {
                     <div key={l.inventoryId} className="flex flex-wrap items-center gap-3 py-3">
                       <div className="flex-1">
                         <p className="text-[20px] font-bold">{l.location.code}：{l.quantity} {g.unit}</p>
-                        <p className="muted">{l.location.warehouseName}・到期 {fmtDate(l.batch.expiryDate)}・批次 {l.batch.batchNo}</p>
+                        <p className="muted">{l.location.warehouseName}・進貨 {fmtReceived(l.batch.receivedDate, l.batch.createdAt)}・到期 {fmtDate(l.batch.expiryDate)}・批次 {l.batch.batchNo}</p>
                       </div>
                       <Link className="btn-sm" to={`/floorplan?warehouse=${l.location.warehouseCode}&highlight=${l.location.code}`}>標出位置</Link>
                       <Link className="btn-sm" to={`/outbound?productId=${productId}&batchId=${l.batch.id}&locationId=${l.location.id}`}>從這裡出貨</Link>
