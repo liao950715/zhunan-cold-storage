@@ -175,6 +175,120 @@ test.describe("示範站主要功能", () => {
     expect(await occupied(page, "A-01-01")).toBe(20);
   });
 
+  test("出庫：選好商品就預選「建議優先出庫」的位置 1 箱（每個商品都一樣）；數量、位置都還能改（FR-011／012）", async ({ page }) => {
+    await login(page, "staff");
+    await page.goto("/outbound");
+    const qty = page.getByLabel("出庫數量", { exact: true });
+    const recommended = page.locator("[data-recommended]");
+    // 青江菜：9/18 進貨的 B-03-04 最早（先進先出）→ 直接是已選、1 箱
+    await page.getByRole("radio", { name: /青江菜/ }).click();
+    await expect(qty).toHaveValue("1");
+    await expect(recommended).toContainText("從 B-03-04 取 1 箱");
+    await expect(recommended).toContainText("✓ 已選");
+    await expect(recommended).toContainText("建議優先出庫");
+    // 其他商品也一樣：紅蘿蔔最早那批在 A-02-01；草莓較早那批已過期 → 建議 B-01-04；毛豆單位公斤
+    for (const [name, code, unit] of [["紅蘿蔔", "A-02-01", "箱"], ["草莓", "B-01-04", "箱"], ["毛豆", "B-02-05", "公斤"]]) {
+      await page.getByRole("radio", { name: new RegExp(name) }).click();
+      await expect(qty).toHaveValue("1");
+      await expect(recommended).toContainText(`從 ${code} 取 1 ${unit}`);
+      await expect(recommended).toContainText("建議優先出庫");
+    }
+    // 可以改數量
+    await page.getByRole("radio", { name: /青江菜/ }).click();
+    await qty.fill("3");
+    await expect(recommended).toContainText("從 B-03-04 取 3 箱");
+    // 可以改選其他儲位：B-03-04 改 0、B-03-05 取 1 → 上面的數量跟著變成 1
+    await page.getByRole("button", { name: "調整取貨位置或數量" }).click();
+    await page.getByLabel("B-03-04 出庫數量").fill("0");
+    await page.getByLabel("B-03-05 出庫數量").fill("1");
+    await expect(qty).toHaveValue("1");
+    await page.getByRole("button", { name: "完成調整" }).click();
+    await expect(page.getByText(/從 B-03-05 取 1 箱/)).toBeVisible();
+    await page.getByRole("button", { name: "下一步：核對並出庫" }).click();
+    await expect(page.getByText("青江菜，出庫 1 箱")).toBeVisible();
+    await page.getByRole("button", { name: "確認出庫" }).click();
+    await expect(page.getByText("✓ 出庫完成")).toBeVisible();
+    expect(await occupied(page, "B-03-04")).toBe(4);
+    expect(await occupied(page, "B-03-05")).toBe(7);
+    // 從首頁「優先出貨」連結進來（?productId=）也一樣預選
+    const bokChoy = await productByName(page, "青江菜");
+    await page.goto(`/outbound?productId=${bokChoy.id}`);
+    await expect(qty).toHaveValue("1");
+    await expect(recommended).toContainText("從 B-03-04 取 1 箱");
+  });
+
+  test("平面圖儲位卡片最下面：最近一筆異動（入庫 +2、盤點中報損 −1、出庫 −1、盤點調整附原因、沒有紀錄）", async ({ page }) => {
+    const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "/");
+    const now = new RegExp(`^${today} \\d{2}:\\d{2}$`);
+    await login(page, "staff");
+
+    // ① 青江菜入庫 2 箱到 A-04-05
+    await page.goto("/inbound");
+    await page.getByRole("radio", { name: /青江菜/ }).click();
+    await page.getByLabel("數量").fill("2");
+    await page.getByRole("button", { name: "30 天後" }).click();
+    await selectByText(page.getByRole("combobox", { name: "儲位", exact: true }).first(), "A-04-05");
+    await page.getByRole("button", { name: "下一步：核對並入庫" }).click();
+    await expect(page.getByText("青江菜，入庫 2 箱")).toBeVisible();
+    await page.getByRole("button", { name: "確認入庫" }).click();
+    await expect(page.getByText("✓ 入庫完成")).toBeVisible();
+
+    // ② A-01-03 甘藍菜：盤點發現 1 箱爛掉 → 建立報損 −1；同一張盤點另把 A-01-06 大白菜 12 → 11（直接盤點調整）
+    await page.goto("/stocktake");
+    await page.getByRole("button", { name: "＋ 新盤點" }).click();
+    await selectByText(page.locator("select").first(), "冷凍庫 A");
+    const a0103 = page.locator('[id^="st-line-"]').filter({ hasText: "已過期，請檢查是否腐爛" });
+    await expect(a0103).toContainText("A-01-03");
+    await a0103.getByRole("spinbutton").fill("1");
+    await a0103.getByRole("radio", { name: "腐爛／損壞，無法販售" }).click();
+    await a0103.getByRole("button", { name: "A-01-03 建立報損" }).click();
+    await expect(page.getByLabel("報損數量")).toHaveValue("1");
+    await page.getByRole("button", { name: "下一步：核對並報損" }).click();
+    await page.getByRole("button", { name: "確認報損" }).click();
+    await expect(page.getByText(/已報損 甘藍菜 1 箱/)).toBeVisible();
+    const a0106 = page.locator('[id^="st-line-"]').filter({ hasText: "A-01-06" });
+    await a0106.getByRole("spinbutton").fill("11");
+    await a0106.getByRole("radio", { name: "腐爛／損壞，無法販售" }).click();
+    await page.getByRole("button", { name: "提交盤點" }).click();
+    await page.getByTestId("dialog-confirm").click();
+    await expect(page.getByText(/已提交，等待管理員核准/)).toBeVisible();
+
+    // ③ B-03-04 青江菜出庫 −1（選商品就預選 B-03-04 1 箱）
+    await page.goto("/outbound");
+    await page.getByRole("radio", { name: /青江菜/ }).click();
+    await expect(page.locator("[data-recommended]")).toContainText("從 B-03-04 取 1 箱");
+    await page.getByRole("button", { name: "下一步：核對並出庫" }).click();
+    await page.getByRole("button", { name: "確認出庫" }).click();
+    await expect(page.getByText("✓ 出庫完成")).toBeVisible();
+
+    // 管理員核准：A-01-06 產生一筆盤點調整；A-01-03 報損時已扣過，不再調整
+    await page.getByRole("button", { name: "登出" }).click();
+    await login(page, "admin");
+    await page.goto("/stocktake");
+    await page.getByRole("button", { name: "核准" }).first().click();
+    await page.getByTestId("dialog-confirm").click();
+    await expect(page.getByText(/已核准，產生 1 筆調整/)).toBeVisible();
+
+    // ④ 平面圖：點儲位，卡片最下面看最近一筆
+    const lastOf = async (warehouse: "A" | "B", code: string) => {
+      await page.goto(`/floorplan?warehouse=${warehouse}`);
+      await expect(page.locator(".konvajs-content")).toBeVisible();
+      await clickCell(page, code);
+      await expect(page.getByRole("heading", { name: code, exact: true })).toBeVisible();
+      return page.getByRole("region", { name: "最近一筆異動紀錄" });
+    };
+    await expect((await lastOf("A", "A-04-05")).locator("dd")).toHaveText(["入庫", "青江菜", "+2 箱", now]);
+    await expect((await lastOf("A", "A-01-03")).locator("dd")).toHaveText(["報損", "甘藍菜", "−1 箱", "腐爛（盤點時發現）", now]);
+    await expect((await lastOf("B", "B-03-04")).locator("dd")).toHaveText(["出庫", "青江菜", "−1 箱", now]);
+    await expect((await lastOf("A", "A-01-06")).locator("dd")).toHaveText(["盤點調整", "大白菜", "−1 箱", "腐爛／損壞，無法販售", now]);
+    // 沒動過的格子：示範資料的入庫，時間是那批的進貨時間（不是今天）
+    const seeded = (await lastOf("A", "A-01-01")).locator("dd");
+    await expect(seeded).toHaveText(["入庫", "甘藍菜", "+20 箱", /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/]);
+    await expect(seeded.last()).not.toHaveText(now);
+    // 從沒放過東西的空位
+    await expect(await lastOf("B", "B-03-06")).toContainText("尚無異動紀錄");
+  });
+
   test("商品管理：管理員看得到商品清單與「新增商品」（FR-002）", async ({ page }) => {
     await login(page, "admin");
     await page.goto("/products");

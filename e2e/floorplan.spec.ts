@@ -45,7 +45,9 @@ test.describe.serial("平面圖配置編輯（AT-15、AT-16、AT-17）", () => {
     await page.goto("/floorplan?warehouse=A");
     await clickCell(page, "A-01-01");
     await expect(page.getByRole("heading", { name: "A-01-01" })).toBeVisible();
-    await expect(page.getByText("紅蘿蔔")).toBeVisible();
+    await expect(page.getByText("紅蘿蔔", { exact: true })).toHaveCount(2); // 目前商品＋最近一筆異動
+    // 卡片最下面：最近一筆異動＝示範資料的入庫，時間是那批的進貨時間
+    await expect(page.getByRole("region", { name: "最近一筆異動紀錄" }).locator("dd")).toHaveText(["入庫", "紅蘿蔔", "+12 箱", /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/]);
     await page.getByRole("button", { name: "從這裡取貨（出庫）" }).click();
     await expect(page).toHaveURL(/\/outbound\?productId=\d+&locationId=\d+/);
     await expect(page.getByText(/從 A-01-01 取/)).toBeVisible();

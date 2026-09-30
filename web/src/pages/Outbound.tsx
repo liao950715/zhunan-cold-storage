@@ -14,6 +14,7 @@ interface Line { batchId: number; batchNo: string; receivedDate: string; receive
 
 /**
  * 出庫（FR-011／012）：要出什麼 → 要出多少 → 到哪裡拿（系統建議先進先出：最早進貨的先拿，可調整）→ 確認出庫。
+ * 選好商品就預設出 1（2026-10-01）：建議優先出庫（最早進貨、未過期）的那一格直接是已選狀態，數量與位置都還能改。
  * 效期另外警示：已過期不自動安排、快到期標示、較晚進貨卻較早到期的批次會提醒。
  * 從平面圖／查詢帶 ?productId=&batchId=&locationId= 進來時，直接列出該儲位。
  */
@@ -34,8 +35,11 @@ export default function Outbound() {
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
-    if (preset.productId && !product && products.data) setProduct(products.data.items.find((p) => p.id === preset.productId) ?? null);
-  }, [preset.productId, products.data, product]);
+    if (!preset.productId || product || !products.data) return;
+    const p = products.data.items.find((x) => x.id === preset.productId) ?? null;
+    setProduct(p);
+    if (p && !preset.locationId) setQuantity((q) => q || 1); // 從首頁「優先出貨」進來：一樣預設 1
+  }, [preset.productId, preset.locationId, products.data, product]);
 
   const stock = useQuery({ queryKey: ["productStock", product?.id], queryFn: () => get<ProductStock>(`/products/${product!.id}/stock`), enabled: !!product });
 
@@ -87,16 +91,20 @@ export default function Outbound() {
   const active = lines.filter((l) => l.quantity > 0);
   // 只有「建議是針對目前數量算的」時才顯示不足（手動調整過就以各儲位合計為準）
   const shortage = suggestStale || suggest.data?.requested !== quantity ? 0 : (suggest.data?.shortage ?? 0);
+  // 可出庫的（未過期）一個都沒有：不要顯示「不夠 1 箱」，直接說沒有庫存
+  const noStock = !preset.locationId && !suggestStale && suggest.data?.requested === quantity && suggest.data.available === 0;
+  const noStockText = product ? `目前沒有可以出庫的${product.name}${expiredLines.length > 0 ? "（只剩已過期的，請改走報損或盤點處理）" : ""}` : "";
 
   const stepText = (() => {
     if (!product) return "要出什麼？請先選商品";
     if (preset.locationId) return lines.length === 0 ? "正在讀取這個儲位的貨…" : active.length === 0 ? `要出多少？請在取貨位置填數量（單位：${product.unit}）` : over ? "有一筆超過該儲位的數量，請改小" : "請核對後按「下一步：核對並出庫」";
     if (quantity <= 0) return `要出多少？填數量後會自動列出建議的取貨位置（單位：${product.unit}）`;
     if (waitingSuggest && lines.length === 0) return "正在找建議的取貨位置…";
+    if (noStock) return noStockText;
     if (shortage > 0) return `庫存只有 ${suggest.data!.available} ${product.unit}，不夠 ${shortage} ${product.unit}；請改數量，或只出 ${suggest.data!.available} ${product.unit}`;
     if (over) return "有一筆超過該儲位的數量，請改小";
     if (active.length === 0) return "請在取貨位置填數量";
-    return "取貨位置已在圖上標出（先進先出：最早進貨的先拿）；不合適可按「調整」或點圖上有這個商品的格子，確認後按「下一步：核對並出庫」";
+    return "已先選好「建議優先出庫」的位置（先進先出：最早進貨的先拿）；數量可在上面改，要換位置按「調整取貨位置或數量」或點圖上有這個商品的格子，確認後按「下一步：核對並出庫」";
   })();
 
   const m = useMutation({
@@ -107,7 +115,7 @@ export default function Outbound() {
       setIdemKey(crypto.randomUUID());
       setConfirming(false);
       setLines([]);
-      setQuantity(0);
+      setQuantity(preset.locationId ? 0 : 1); // 「再出庫一筆」一樣預設 1
       suggest.reset();
     },
     onError: () => setConfirming(false),
@@ -171,7 +179,7 @@ export default function Outbound() {
         <div className="panel space-y-3">
           <p className="text-[26px] font-bold">{product.name}，出庫 {total} {unit}</p>
           {active.map((l) => (
-            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}<span className="ml-2 muted">進貨 {fmtReceived(l.receivedAt, l.receivedDate)}・到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
+            <p key={`${l.batchId}-${l.locationId}`} className="text-[22px]">從 <b>{l.locationCode}</b><span className="ml-1 text-[18px] text-ink-2">（{locationWords(l.locationCode)}）</span> 取 {l.quantity} {unit}{!preset.locationId && lines.indexOf(l) === firstFifo && <span className="tag-info ml-2 align-middle">建議優先出庫</span>}<span className="ml-2 muted">進貨 {fmtReceived(l.receivedAt, l.receivedDate)}・到期 {fmtDate(l.expiryDate)}・批次 {l.batchNo}</span></p>
           ))}
         </div>
         {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
@@ -190,7 +198,7 @@ export default function Outbound() {
       {m.error && <Message kind="error">{errorMessage(m.error)}</Message>}
 
       <Step n={1} title="要出什麼？" done={!!product}>
-        <ProductSelect value={product?.id ?? null} onChange={(p) => { setProduct(p); setLines([]); suggest.reset(); }} allowCreate={false} />
+        <ProductSelect value={product?.id ?? null} onChange={(p) => { setProduct(p); setLines([]); suggest.reset(); if (!preset.locationId) setQuantity(p ? 1 : 0); }} allowCreate={false} />
         {stock.data && <p className="mt-3 text-[20px]">目前有 <b>{stock.data.total} {stock.data.product.unit}</b>，分在 {stock.data.lines.length} 個儲位</p>}
       </Step>
 
@@ -201,23 +209,32 @@ export default function Outbound() {
             <span className="text-[24px] font-bold">{unit}</span>
           </div>
           {lines.length > 0 && <p className="mt-2 muted">出庫數量＝下面各取貨位置的合計；在下面改數量，這裡會自動跟著變。</p>}
-          {shortage > 0 && <Message kind="warn">庫存只有 {suggest.data!.available} {unit}，不夠 {shortage} {unit}。可以先出 {suggest.data!.available} {unit}，或改數量。</Message>}
+          {noStock && <Message kind="warn">{noStockText}</Message>}
+          {!noStock && shortage > 0 && <Message kind="warn">庫存只有 {suggest.data!.available} {unit}，不夠 {shortage} {unit}。可以先出 {suggest.data!.available} {unit}，或改數量。</Message>}
         </Step>
       )}
 
       <Step n={preset.locationId ? 2 : 3} title="到哪裡拿？" done={active.length > 0 && !over}>
         {lines.length === 0 ? (
-          <p className="muted">{product ? "填好數量後，這裡會列出建議的取貨位置（先進先出：最早進貨的先拿）。" : "請先選商品。"}</p>
+          <p className="muted">{!product ? "請先選商品。" : quantity <= 0 ? "填好數量後，這裡會列出建議的取貨位置（先進先出：最早進貨的先拿）。" : waitingSuggest ? "正在找建議的取貨位置…" : noStockText || "目前沒有可以出庫的庫存。"}</p>
         ) : (
           <div className="space-y-3">
             {!preset.locationId && <p className="muted">建議優先出庫（先進先出）：系統依進貨時間，先列出最早進貨的貨；不合適可以按「調整」。</p>}
             {expiredLines.length > 0 && <Message kind="warn">有 {expiredLines.length} 筆已過期（{[...new Set(expiredLines.map((l) => l.locationCode))].join("、")}），系統沒有安排出庫；請改走報損或盤點處理。</Message>}
             {earlierExpiry && <Message kind="warn">效期提醒：{earlierExpiry.locationCode} 那批較晚進貨，但 {fmtDate(earlierExpiry.expiryDate)} 就到期，比建議先拿的更早到期，請確認要不要先出那批。</Message>}
             <div className="divide-y divide-line">
-              {lines.map((l, i) => (adjusting || l.quantity > 0) && (
-                <div key={`${l.batchId}-${l.locationId}`} className={`flex flex-wrap items-center gap-3 py-3 ${l.quantity > 0 ? "" : "opacity-70"}`}>
+              {lines.map((l, i) => {
+                // 建議優先出庫＝先進先出第一個未過期的；有要拿的就是「已選」
+                const recommended = i === firstFifo && !preset.locationId;
+                const picked = l.quantity > 0;
+                return (adjusting || picked) && (
+                <div key={`${l.batchId}-${l.locationId}`} data-recommended={recommended || undefined} className={`flex flex-wrap items-center gap-3 py-3 ${picked ? "" : "opacity-70"} ${recommended && picked ? "rounded-[12px] border-2 border-brand bg-brand-soft px-3" : ""}`}>
                   <div className="flex-1">
-                    <p className="text-[22px] font-bold">從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}{i === firstFifo && !preset.locationId && <span className="tag-info ml-2 align-middle text-[14px]">最早入庫</span>}</p>
+                    {recommended && <p className="mb-1"><span className="inline-block rounded-md border-2 border-brand bg-white px-2 py-0.5 text-[17px] font-bold text-brand-deep">建議優先出庫（最早入庫）</span></p>}
+                    <p className="text-[22px] font-bold">
+                      {picked && <span className="tag-ok mr-2 align-middle">✓ 已選</span>}
+                      從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}
+                    </p>
                     <p className="muted">
                       這裡有 {l.available} {unit}・進貨 {fmtReceived(l.receivedAt, l.receivedDate)}・到期 {fmtDate(l.expiryDate)}
                       {l.expired && <span className="tag-bad ml-2">已過期</span>}
@@ -232,7 +249,8 @@ export default function Outbound() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">

@@ -152,12 +152,13 @@ export function listMovements(db: Db, q: { type?: string; productId?: number; ba
   if (q.dateTo) { conds.push("m.createdAt < ?"); params.push(`${q.dateTo}T23:59:59.999`); }
   const where = conds.length ? "WHERE " + conds.join(" AND ") : "";
   const total = db.one<{ n: number }>(`SELECT COUNT(*) AS n FROM StockMovement m ${where}`, ...params)!.n;
+  // 新的在前：依時間（實際操作的時間與 id 同步遞增；示範資料的模擬歷史時間較早），同時間再依 id
   const rows = db.all<Record<string, string | number | null>>(
     `SELECT m.*, b.batchNo, p.name AS productName, p.unit, lf.code AS fromCode, lt.code AS toCode, u.displayName AS operatorName,
        (SELECT r.id FROM StockMovement r WHERE r.reversalOfId = m.id) AS reversedById
      FROM StockMovement m JOIN Batch b ON b.id = m.batchId JOIN Product p ON p.id = m.productId
      LEFT JOIN Location lf ON lf.id = m.fromLocationId LEFT JOIN Location lt ON lt.id = m.toLocationId JOIN User u ON u.id = m.operatorId
-     ${where} ORDER BY m.id DESC LIMIT ? OFFSET ?`, ...params, q.limit, q.offset);
+     ${where} ORDER BY m.createdAt DESC, m.id DESC LIMIT ? OFFSET ?`, ...params, q.limit, q.offset);
   const items = rows.map(({ batchNo, productName, unit, fromCode, toCode, operatorName, ...m }) => ({
     ...m, batch: { batchNo }, product: { name: productName, unit }, fromLocation: fromCode ? { code: fromCode } : null, toLocation: toCode ? { code: toCode } : null, operator: { id: m.operatorId, displayName: operatorName },
   }));

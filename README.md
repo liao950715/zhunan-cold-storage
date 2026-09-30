@@ -34,9 +34,9 @@
 npm install
 cp worker/.dev.vars.example worker/.dev.vars   # 設定本機 JWT_SECRET、SYNC_SECRET（同步碼）
 npm run dev        # API http://localhost:8787（wrangler dev）、web http://localhost:5173
-npm test           # worker 79 項＋示範站模式 8 項＋web 5 項
+npm test           # worker 81 項＋示範站模式 8 項＋web 5 項
 npm run test:e2e   # 瀏覽器端對端 20 項（需要 npm run dev）
-npm run test:demo-site   # 示範站主要功能 12 項（自動用示範站設定開本機副本 :8788）
+npm run test:demo-site   # 示範站主要功能 14 項（自動用示範站設定開本機副本 :8788）
 ```
 
 第一次開啟：輸入 `.dev.vars` 的同步碼配對裝置 → 以 `admin/admin1234` 或 `staff/staff1234` 登入（示範帳號）。

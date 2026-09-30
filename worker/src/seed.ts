@@ -101,6 +101,9 @@ export function seedDemoStock(db: Db, mode: "basic" | "rich" = "basic") {
   for (const [idx, r] of rows.entries()) {
     const productId = db.one<{ id: number }>("SELECT id FROM Product WHERE name = ?", r.product)!.id;
     const allocations = r.allocations.map(([code, quantity]) => ({ locationId: db.one<{ id: number }>("SELECT id FROM Location WHERE code = ?", code)!.id, quantity }));
-    inbound(db, { productId, quantity: allocations.reduce((s, a) => s + a.quantity, 0), receivedAt: receivedAt(r.receivedOffset, idx), expiryDate: day(r.expiryOffset), note: "示範資料", allocations }, { operator: { id: admin.id }, allowExpiredForSeed: true });
+    const at = receivedAt(r.receivedOffset, idx);
+    const res = inbound(db, { productId, quantity: allocations.reduce((s, a) => s + a.quantity, 0), receivedAt: at, expiryDate: day(r.expiryOffset), note: "示範資料", allocations }, { operator: { id: admin.id }, allowExpiredForSeed: true });
+    // 模擬的歷史：這批的入庫紀錄時間＝進貨時間（不是建立示範資料的當下），平面圖「最近一筆異動」才不會顯示成今天剛入庫
+    for (const id of res.movementIds) db.run("UPDATE StockMovement SET createdAt = ? WHERE id = ?", at, id);
   }
 }
