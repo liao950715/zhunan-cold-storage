@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { errorMessage } from "../api/client";
+import { isDemo } from "../lib/demo";
 import { Field, Message } from "../components/ui";
 
 export default function Login() {
@@ -37,6 +38,13 @@ export default function Login() {
           <h1 className="text-[30px] font-bold">竹南冷凍倉儲</h1>
           <p className="text-[18px] text-ink-2">庫存管理系統</p>
         </div>
+        {isDemo() && (
+          <div role="note" aria-label="示範站說明" className="space-y-1 rounded-[10px] bg-brand-soft p-3 text-[17px]">
+            <p className="font-bold">示範站（不需同步碼）</p>
+            <p>管理員 admin／admin1234、工作人員 staff／staff1234</p>
+            <p className="text-[16px] text-ink-2">每個瀏覽器各有一份示範資料，不影響別人；重新整理會回到初始資料。</p>
+          </div>
+        )}
         {expired && <Message kind="warn">登入已逾時（超過 12 小時）或已在別處登出，請重新登入。您剛才在畫面上填的內容需要重新輸入。</Message>}
         <Field label="帳號"><input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required /></Field>
         {/* 密碼欄：切換按鈕放在 label 外面，label 只指向輸入框 */}

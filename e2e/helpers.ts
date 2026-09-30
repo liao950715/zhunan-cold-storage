@@ -2,8 +2,11 @@ import { expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
 export const SYNC_CODE = (() => {
-  const m = /SYNC_SECRET=(.+)/.exec(readFileSync("worker/.dev.vars", "utf8"));
-  return m?.[1].trim() ?? "";
+  try {
+    return /SYNC_SECRET=(.+)/.exec(readFileSync("worker/.dev.vars", "utf8"))?.[1].trim() ?? "";
+  } catch {
+    return ""; // 沒有 .dev.vars（例如只檢查示範站）：用不到同步碼
+  }
 })();
 export const ACCOUNTS = { admin: { username: "admin", password: "admin1234" }, staff: { username: "staff", password: "staff1234" } };
 

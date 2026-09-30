@@ -1,6 +1,8 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { isDemo, resetDemoData } from "../lib/demo";
+import { useDialog } from "./ConfirmDialog";
 import { ChevronIcon, ClipboardIcon, DamageIcon, HistoryIcon, HomeIcon, InboundIcon, LeafIcon, LogoutIcon, MapIcon, MenuIcon, OutboundIcon, SearchIcon, SettingsIcon, TransferIcon } from "./icons";
 
 interface Item { to: string; label: string; icon: ComponentType<{ size?: number; className?: string }>; adminOnly?: boolean }
@@ -55,6 +57,7 @@ export default function Shell() {
   const inMore = [...MORE, ...ADMIN].some((m) => loc.pathname.startsWith(m.to));
   const [moreOpen, setMoreOpen] = useState(inMore);
   const [large, setLarge] = useLargeText();
+  const dialog = useDialog();
   useEffect(() => { if (inMore) setMoreOpen(true); }, [inMore]);
   // 手機：選好作業後把「其他」格子收起來，首屏留給表單（電腦側欄不受影響）
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
@@ -93,6 +96,12 @@ export default function Shell() {
     <div className="min-h-screen bg-bg text-ink lg:grid lg:grid-cols-[240px_1fr]">
       {!online && (
         <div role="alert" className="sticky top-0 z-40 bg-bad px-4 py-3 text-center text-[18px] font-bold text-white lg:col-span-2">目前沒有網路連線：畫面上的資料可能不是最新的，送出會失敗；恢復連線後再試。</div>
+      )}
+      {isDemo() && (
+        <div role="note" aria-label="示範站說明" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-brand-soft px-4 py-2 text-[16px] text-ink lg:col-span-2">
+          <span className="min-w-0 flex-1"><b>示範站</b>：這個瀏覽器有自己的一份示範資料，不影響別人；按重新整理或「重置示範資料」會回到初始資料。</span>
+          <button type="button" className="btn-sm shrink-0" onClick={async () => { if (await dialog.confirm("重置示範資料", "會清掉您在這個瀏覽器做的入庫、出庫、搬移、報損、盤點等操作，回到初始示範資料（其他人的資料不受影響）。\n確定要重置嗎？")) resetDemoData(); }}>重置示範資料</button>
+        </div>
       )}
       {/* 電腦版側欄 */}
       <aside className="hidden border-r border-line bg-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">

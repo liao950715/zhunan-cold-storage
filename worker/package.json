@@ -7,8 +7,10 @@
     "dev": "wrangler dev --port 8787",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "deploy:demo": "wrangler deploy -c wrangler.demo.jsonc"
+    "test": "vitest run && vitest run -c vitest.demo.config.ts",
+    "deploy:demo": "wrangler deploy -c wrangler.demo.jsonc",
+    "dev:demo": "wrangler dev -c wrangler.demo.jsonc --port 8788 --persist-to .wrangler/demo-state",
+    "test:demo": "vitest run -c vitest.demo.config.ts"
   },
   "dependencies": {
     "hono": "^4.7.4"

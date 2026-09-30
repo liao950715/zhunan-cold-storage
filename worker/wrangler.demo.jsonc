@@ -14,8 +14,9 @@
     "bindings": [{ "name": "WAREHOUSE", "class_name": "WarehouseDO" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WarehouseDO"] }],
-  "vars": { "DEMO_MODE": "rich", "PAIRING": "off" },
-  // 每天台灣時間 03:00（UTC 19:00）重置成示範資料
+  // DEMO_SANDBOX=per-browser：每個瀏覽器各一份示範資料（第一次開啟、重新整理、按「重置示範資料」都回到初始），閒置 6 小時自動刪除
+  "vars": { "DEMO_MODE": "rich", "PAIRING": "off", "DEMO_SANDBOX": "per-browser" },
+  // 每天台灣時間 03:00（UTC 19:00）重置沒帶 cookie（curl、腳本）共用的那份示範資料
   "triggers": { "crons": ["0 19 * * *"] },
   "observability": { "enabled": true }
   // secrets：JWT_SECRET（示範站不需同步碼）

@@ -17,6 +17,12 @@
 > - 防重複：`StockMovement.reversalOfId UNIQUE` ＋ 交易內先查；REVERSAL 本身不可再復原。
 > - 前端：異動紀錄頁（管理員）每筆「復原這筆操作」→ 內嵌面板（原始資訊、預計變化、原因必填、確認／取消）；已復原者顯示「已復原（紀錄 #n）」並隱藏按鈕；工作人員只看得到。
 
+> **示範站：每個瀏覽器一份示範資料（2026-10-01，使用者決定）**——只在 `DEMO_SANDBOX=per-browser` 的部署（`wrangler.demo.jsonc`）生效，正式站不變。
+> - 分流：前端每次開頁先 `POST /api/demo/session { fresh }`（只收 JSON，防表單 CSRF）；Worker 發 HttpOnly cookie `demo_sandbox=<32 位 16 進位>`，之後 `/api/*` 依 cookie 送到 `idFromName("sandbox:<編號>")` 的 DO（各自 SQLite、各自 seed rich 示範資料）；沒有或格式不對 → 共用的 `main`。正式站此端點回 `{demo:false}`、一律 `main`。
+> - 重置：`fresh` ＝ 重新整理（Navigation Timing `type === "reload"`）或按「重置示範資料」（`/?demo-reset=1`）。資料改過（成功的非 GET，登入登出、出庫建議、重置本身除外）或不是今天（台灣）建的才換新編號；沒改過的本來就是初始資料，沿用（省 DO 寫入量）。登入 JWT 不變（新資料的帳號 id 相同），重置後仍保持登入。
+> - 清除：每份資料 DO alarm 閒置 6 小時 → `storage.deleteAll()`；之後同一 cookie 再來會自動重建。alarm 最多每 30 分鐘重寫一次。
+> - 測試：`worker/test-demo/`（`vitest.demo.config.ts`，I-22）、`e2e-demo/`（`npm run test:demo-site`，本機示範站副本或 `DEMO_URL` 線上檢查）。
+
 
 ---
 

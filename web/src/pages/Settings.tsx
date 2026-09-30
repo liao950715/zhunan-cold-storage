@@ -34,7 +34,7 @@ export default function Settings() {
     mutationFn: () => post("/admin/reset-demo", { confirm: "RESET" }),
     onSuccess: async () => {
       await qc.invalidateQueries();
-      setMsg({ kind: "ok", text: "已重置為展示資料：帳號、兩座冷凍庫、20 種商品、4 批示範庫存。" });
+      setMsg({ kind: "ok", text: "已重置為展示資料：帳號、冷凍庫、商品與示範庫存都回到初始狀態。" });
     },
     onError: (e) => setMsg({ kind: "error", text: errorMessage(e) }),
   });

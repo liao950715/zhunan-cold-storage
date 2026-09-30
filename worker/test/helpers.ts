@@ -7,6 +7,13 @@ export interface Res<T = any> { status: number; body: T; headers: Headers }
 export class Client {
   private cookies = new Map<string, string>();
 
+  cookie(name: string) {
+    return this.cookies.get(name);
+  }
+  setCookie(name: string, value: string) {
+    this.cookies.set(name, value);
+  }
+
   private cookieHeader() {
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   }
