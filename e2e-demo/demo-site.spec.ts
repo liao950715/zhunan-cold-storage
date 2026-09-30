@@ -57,6 +57,7 @@ test.describe("示範站主要功能", () => {
     await page.goto("/inbound");
     await page.getByRole("radio", { name: /甘藍菜/ }).click();
     await expect(page.getByText("目前選擇：甘藍菜")).toBeVisible();
+    await expect(page.getByLabel("縮小商品清單")).toHaveValue("甘藍菜"); // 入庫也一樣：選了就自動填進篩選框
     await page.getByLabel("數量").fill("30");
     await page.getByRole("button", { name: "30 天後" }).click();
     await page.getByRole("button", { name: "分到其他儲位" }).click();
@@ -175,34 +176,41 @@ test.describe("示範站主要功能", () => {
     expect(await occupied(page, "A-01-01")).toBe(20);
   });
 
-  test("出庫：選好商品就預選「建議優先出庫」的位置 1 箱（每個商品都一樣）；數量、位置都還能改（FR-011／012）", async ({ page }) => {
+  test("出庫：選好商品就預選「建議優先出庫」1 箱，下面直接列出所有儲位可填數量（每個商品都一樣）；選的商品自動填進篩選框（FR-011／012）", async ({ page }) => {
     await login(page, "staff");
     await page.goto("/outbound");
     const qty = page.getByLabel("出庫數量", { exact: true });
     const recommended = page.locator("[data-recommended]");
-    // 青江菜：9/18 進貨的 B-03-04 最早（先進先出）→ 直接是已選、1 箱
+    const filter = page.getByLabel("縮小商品清單");
+    // 青江菜：9/18 進貨的 B-03-04 最早（先進先出）→ 直接是已選、1 箱；其他有青江菜的儲位也列出來，空著可以直接填
     await page.getByRole("radio", { name: /青江菜/ }).click();
+    await expect(filter).toHaveValue("青江菜"); // 選了就自動填進篩選框，清單縮成這一項
+    await expect(page.getByRole("radio")).toHaveCount(1);
     await expect(qty).toHaveValue("1");
     await expect(recommended).toContainText("從 B-03-04 取 1 箱");
     await expect(recommended).toContainText("✓ 已選");
     await expect(recommended).toContainText("建議優先出庫");
-    // 其他商品也一樣：紅蘿蔔最早那批在 A-02-01；草莓較早那批已過期 → 建議 B-01-04；毛豆單位公斤
+    await expect(page.getByLabel("B-03-04 出庫數量")).toHaveValue("1");
+    await expect(page.getByLabel("B-03-05 出庫數量")).toHaveValue("");
+    // 其他商品也一樣（按「顯示全部商品」換商品）：紅蘿蔔最早那批在 A-02-01；草莓較早那批已過期 → 建議 B-01-04；毛豆單位公斤
     for (const [name, code, unit] of [["紅蘿蔔", "A-02-01", "箱"], ["草莓", "B-01-04", "箱"], ["毛豆", "B-02-05", "公斤"]]) {
+      await page.getByRole("button", { name: "顯示全部商品" }).click();
+      await expect(filter).toHaveValue("");
       await page.getByRole("radio", { name: new RegExp(name) }).click();
+      await expect(filter).toHaveValue(name);
       await expect(qty).toHaveValue("1");
       await expect(recommended).toContainText(`從 ${code} 取 1 ${unit}`);
       await expect(recommended).toContainText("建議優先出庫");
     }
     // 可以改數量
+    await page.getByRole("button", { name: "顯示全部商品" }).click();
     await page.getByRole("radio", { name: /青江菜/ }).click();
     await qty.fill("3");
     await expect(recommended).toContainText("從 B-03-04 取 3 箱");
-    // 可以改選其他儲位：B-03-04 改 0、B-03-05 取 1 → 上面的數量跟著變成 1
-    await page.getByRole("button", { name: "調整取貨位置或數量" }).click();
+    // 可以改選其他儲位：直接在清單把 B-03-04 改 0、B-03-05 填 1 → 上面的數量跟著變成 1
     await page.getByLabel("B-03-04 出庫數量").fill("0");
     await page.getByLabel("B-03-05 出庫數量").fill("1");
     await expect(qty).toHaveValue("1");
-    await page.getByRole("button", { name: "完成調整" }).click();
     await expect(page.getByText(/從 B-03-05 取 1 箱/)).toBeVisible();
     await page.getByRole("button", { name: "下一步：核對並出庫" }).click();
     await expect(page.getByText("青江菜，出庫 1 箱")).toBeVisible();
@@ -213,6 +221,7 @@ test.describe("示範站主要功能", () => {
     // 從首頁「優先出貨」連結進來（?productId=）也一樣預選
     const bokChoy = await productByName(page, "青江菜");
     await page.goto(`/outbound?productId=${bokChoy.id}`);
+    await expect(filter).toHaveValue("青江菜");
     await expect(qty).toHaveValue("1");
     await expect(recommended).toContainText("從 B-03-04 取 1 箱");
   });

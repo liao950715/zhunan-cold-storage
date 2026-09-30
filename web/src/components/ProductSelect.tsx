@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { errorMessage, post } from "../api/client";
 import { useProducts } from "../api/hooks";
@@ -15,6 +15,10 @@ export default function ProductSelect({ value, onChange, allowCreate = true }: {
   const all = products.data?.items ?? [];
   const selected = all.find((p) => p.id === value) ?? null;
   const items = all.filter((p) => !q || p.name.includes(q));
+  // 選好商品（點選、或從別頁帶進來）就把名稱填進下面的篩選框：清單縮成這一項，一看就知道選了什麼；要換按「顯示全部商品」
+  useEffect(() => {
+    if (selected) setQ(selected.name);
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-3">
@@ -33,7 +37,7 @@ export default function ProductSelect({ value, onChange, allowCreate = true }: {
               type="button"
               role="radio"
               aria-checked={on}
-              onClick={() => onChange(p)}
+              onClick={() => { setQ(p.name); onChange(p); }}
               className={`flex min-h-[56px] items-center justify-between gap-2 rounded-[10px] border-2 px-3 text-left text-[20px] font-medium ${on ? "border-brand bg-brand-soft text-ink" : "border-line bg-white text-ink hover:border-brand"}`}
             >
               <span>{on && <span aria-hidden="true" className="mr-1 text-brand-deep">✓</span>}{p.name}</span>
@@ -49,6 +53,7 @@ export default function ProductSelect({ value, onChange, allowCreate = true }: {
           <span className="block text-[16px] text-ink-2">商品太多找不到？輸入名稱縮小上面的清單（可不填）</span>
           <input className="input mt-1" placeholder="例如：甘藍" value={q} onChange={(e) => setQ(e.target.value)} aria-label="縮小商品清單" />
         </label>
+        {q && <button type="button" className="btn" onClick={() => setQ("")}>顯示全部商品</button>}
         {allowCreate && (
           <button type="button" className="btn" onClick={() => setCreating(true)}>找不到？新增商品</button>
         )}
@@ -59,7 +64,7 @@ export default function ProductSelect({ value, onChange, allowCreate = true }: {
           onCancel={() => setCreating(false)}
           onCreated={(p) => {
             setCreating(false);
-            setQ("");
+            setQ(p.name);
             onChange(p);
           }}
         />

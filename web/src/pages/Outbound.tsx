@@ -29,7 +29,6 @@ export default function Outbound() {
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(0);
   const [lines, setLines] = useState<Line[]>([]);
-  const [adjusting, setAdjusting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<Line[] | null>(null);
   const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
@@ -53,7 +52,6 @@ export default function Outbound() {
       const daysLeft = Math.round((Date.parse(l.batch.expiryDate) - Date.parse(today)) / 86_400_000);
       return { batchId: l.batch.id, batchNo: l.batch.batchNo, receivedDate: l.batch.receivedDate, receivedAt: l.batch.receivedAt, expiryDate: l.batch.expiryDate, expired: daysLeft < 0, daysLeft, expiringSoon: daysLeft >= 0 && daysLeft <= alert, locationId: l.location.id, locationCode: l.location.code, available: l.quantity, quantity: 0 };
     }));
-    setAdjusting(true);
   }, [stock.data, preset.locationId, preset.batchId, lines.length]);
 
   // 每次商品／數量改變都配一個序號；只接受最新序號的回應，舊回應一律丟掉（審查 #3）
@@ -104,7 +102,7 @@ export default function Outbound() {
     if (shortage > 0) return `庫存只有 ${suggest.data!.available} ${product.unit}，不夠 ${shortage} ${product.unit}；請改數量，或只出 ${suggest.data!.available} ${product.unit}`;
     if (over) return "有一筆超過該儲位的數量，請改小";
     if (active.length === 0) return "請在取貨位置填數量";
-    return "已先選好「建議優先出庫」的位置（先進先出：最早進貨的先拿）；數量可在上面改，要換位置按「調整取貨位置或數量」或點圖上有這個商品的格子，確認後按「下一步：核對並出庫」";
+    return "已先選好「建議優先出庫」的位置（先進先出：最早進貨的先拿）；要改數量或換位置，直接改下面各儲位的數量（或點圖上的格子），確認後按「下一步：核對並出庫」";
   })();
 
   const m = useMutation({
@@ -147,10 +145,8 @@ export default function Outbound() {
     if (!code) return;
     const i = lines.findIndex((l) => l.locationCode === code);
     if (i < 0) { setMapHint(`${code} 沒有「${product?.name ?? "這個商品"}」，請點有這個商品的格子。`); return; }
-    const l = lines[i];
-    if (l.quantity > 0) { setAdjusting(true); return; }
+    if (lines[i].quantity > 0) return; // 已經要從這裡拿：數量在下面的清單改
     setQty(i, 1); // 加進來先取 1，在下面改成要的數量；上面的出庫數量會跟著變
-    setAdjusting(true);
   }
 
   if (result && product) {
@@ -219,21 +215,21 @@ export default function Outbound() {
           <p className="muted">{!product ? "請先選商品。" : quantity <= 0 ? "填好數量後，這裡會列出建議的取貨位置（先進先出：最早進貨的先拿）。" : waitingSuggest ? "正在找建議的取貨位置…" : noStockText || "目前沒有可以出庫的庫存。"}</p>
         ) : (
           <div className="space-y-3">
-            {!preset.locationId && <p className="muted">建議優先出庫（先進先出）：系統依進貨時間，先列出最早進貨的貨；不合適可以按「調整」。</p>}
+            {!preset.locationId && <p className="muted">建議優先出庫（先進先出）：系統依進貨時間，先列出最早進貨的貨；要換位置或改數量，直接改各儲位後面的數量。</p>}
             {expiredLines.length > 0 && <Message kind="warn">有 {expiredLines.length} 筆已過期（{[...new Set(expiredLines.map((l) => l.locationCode))].join("、")}），系統沒有安排出庫；請改走報損或盤點處理。</Message>}
             {earlierExpiry && <Message kind="warn">效期提醒：{earlierExpiry.locationCode} 那批較晚進貨，但 {fmtDate(earlierExpiry.expiryDate)} 就到期，比建議先拿的更早到期，請確認要不要先出那批。</Message>}
             <div className="divide-y divide-line">
               {lines.map((l, i) => {
-                // 建議優先出庫＝先進先出第一個未過期的；有要拿的就是「已選」
+                // 有這個商品的儲位全部列出、每格都能直接填數量；建議優先出庫＝先進先出第一個未過期的；有要拿的就是「已選」
                 const recommended = i === firstFifo && !preset.locationId;
                 const picked = l.quantity > 0;
-                return (adjusting || picked) && (
+                return (
                 <div key={`${l.batchId}-${l.locationId}`} data-recommended={recommended || undefined} className={`flex flex-wrap items-center gap-3 py-3 ${picked ? "" : "opacity-70"} ${recommended && picked ? "rounded-[12px] border-2 border-brand bg-brand-soft px-3" : ""}`}>
                   <div className="flex-1">
                     {recommended && <p className="mb-1"><span className="inline-block rounded-md border-2 border-brand bg-white px-2 py-0.5 text-[17px] font-bold text-brand-deep">建議優先出庫（最早入庫）</span></p>}
                     <p className="text-[22px] font-bold">
                       {picked && <span className="tag-ok mr-2 align-middle">✓ 已選</span>}
-                      從 {l.locationCode} 取 {adjusting ? "" : `${l.quantity} ${unit}`}
+                      從 {l.locationCode} 取 {picked ? `${l.quantity} ${unit}` : ""}
                     </p>
                     <p className="muted">
                       這裡有 {l.available} {unit}・進貨 {fmtReceived(l.receivedAt, l.receivedDate)}・到期 {fmtDate(l.expiryDate)}
@@ -242,12 +238,10 @@ export default function Outbound() {
                       <span className="ml-2">批次 {l.batchNo}</span>
                     </p>
                   </div>
-                  {adjusting && (
-                    <div className="flex items-center gap-2">
-                      <input type="number" min={0} max={l.available} inputMode="numeric" className={`input mt-0 w-28 text-[22px] font-bold ${l.quantity > l.available ? "border-bad" : ""}`} value={l.quantity || ""} onChange={(e) => setQty(i, Number(e.target.value))} aria-label={`${l.locationCode} 出庫數量`} />
-                      <span className="text-[20px]">{unit}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} max={l.available} inputMode="numeric" className={`input mt-0 w-28 text-[22px] font-bold ${l.quantity > l.available ? "border-bad" : ""}`} value={l.quantity || ""} onChange={(e) => setQty(i, Number(e.target.value))} aria-label={`${l.locationCode} 出庫數量`} />
+                    <span className="text-[20px]">{unit}</span>
+                  </div>
                 </div>
                 );
               })}
@@ -267,10 +261,7 @@ export default function Outbound() {
                 <FloorplanCanvas layout={layout.data} racks={toDraft(layout.data)} editing={false} compact selectedLocation={null} selectedRackKey={null} highlightCodes={otherCodes} highlightLabel="也有貨" marks={marks} onSelectLocation={pickOnMap} onSelectRack={() => undefined} onRacksChange={() => undefined} />
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {!preset.locationId && <button type="button" className="btn-sm" onClick={() => setAdjusting(!adjusting)}>{adjusting ? "完成調整" : "調整取貨位置或數量"}</button>}
-              <span className={`text-[18px] ${over ? "font-bold text-bad" : ""}`}>合計 {total} {unit}{over && "　— 有一筆超過該儲位的數量"}</span>
-            </div>
+            <p className={`text-[18px] ${over ? "font-bold text-bad" : ""}`}>合計 {total} {unit}{over && "　— 有一筆超過該儲位的數量"}</p>
           </div>
         )}
       </Step>

@@ -95,7 +95,8 @@ test.describe.serial("老師驗收流程", () => {
     await page.getByRole("radio", { name: /紅蘿蔔/ }).click();
     await page.getByLabel("出庫數量", { exact: true }).fill("2");
     await expect(page.getByText(/從 A-01-01 取 2 箱/)).toBeVisible();
-    await page.getByRole("button", { name: "調整取貨位置或數量" }).click();
+    // 有這個商品的儲位全部直接列出、每格都能填數量（不用先按「調整」或點平面圖）
+    await expect(page.getByLabel("A-01-02 出庫數量")).toHaveValue("");
     await page.getByLabel("A-01-01 出庫數量").fill("1");
     await expect(page.getByLabel("出庫數量", { exact: true })).toHaveValue("1");
     await page.getByLabel("A-01-02 出庫數量").fill("2");
